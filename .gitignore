@@ -1,0 +1,48 @@
+# Environnements virtuels (doit être recréé par chaque contributeur)
+venv/
+env/
+ENV/
+.venv/
+.ENV/
+.RestfulApiTool
+# Fichiers Python compilés
+*.pyc
+*.pyo
+__pycache__/
+
+
+# Fichiers d'éditeur (personnels, non nécessaires pour les autres développeurs)
+.vscode/
+.idea/
+*.sublime-project
+*.sublime-workspace
+
+
+# Fichiers générés par Mac OS
+.DS_Store
+
+
+# Fichiers générés par Windows
+Thumbs.db
+ehthumbs.db
+
+
+# Configuration JetBrains
+*.iml
+*.iws
+.idea/
+
+
+# Cache et couverture de tests
+htmlcov/
+.tox/
+.coverage
+coverage.xml
+*.cover
+.hypothesis/
+.pytest_cache/
+
+
+# Fichiers de cache
+*.cache
+

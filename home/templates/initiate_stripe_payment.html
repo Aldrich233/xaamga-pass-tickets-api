@@ -1,0 +1,19 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Redirecting to Payment</title>
+</head>
+<body>
+    <h1>Redirecting to Payment...</h1>
+    <script>
+        // Get payment_url from the context variable
+        const paymentUrl = "{{ payment_url }}";
+        const paymenttoken = "{{ payment_token }}";
+
+        // Redirect the user to the payment URL
+        window.location.replace(paymentUrl);
+    </script>
+</body>
+</html>
