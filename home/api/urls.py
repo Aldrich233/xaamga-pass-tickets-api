@@ -1,6 +1,7 @@
 from django.urls import path
 
-from home.api.payment_gateway import CancelPageAPIView, CinetpayGroupPaymentAPIView, OrangePaymentAPIView, StripeGroupPaymentAPIView, SuccessPageAPIView, WavePaymentAPIView
+from home.api.payment_gateway import *
+from . import payment_gateway
 from .socialLogin import *
 from .SuperAdminAPIs import *
 from .partnerAPIs import *
@@ -9,6 +10,7 @@ from .eventAPIs import *
 from .EndUserAPIs import *
 from .nfc import *
 from .TeamApis import *
+
 
 
 
@@ -90,7 +92,8 @@ urlpatterns = [
     path('verify-otp/', verify_otp, name='verify_otp'),
     path('reset-password/', reset_password, name='reset_password'),
     path('event/<int:event_id>/passes/', EventPassPriceAPIView.as_view(), name='event-pass-price'),
-    path('event/<int:event_id>/buy_pass/', BuyPassAPIView.as_view(), name='buy-pass'),
+    path('event/buy_pass/', BuyPassAPIView.as_view(), name='buy-pass'),
+    # path('event/<int:event_id>/buy_pass/', BuyPassAPIView.as_view(), name='buy-pass'),
     path('user-purchase-ticket/', GetUserPurchaseTicket.as_view(), name='user-purchase-ticket'),
     path('add-to-cart/', AddToCart.as_view(), name='add-to-cart'),
     path('get-cart-items/', GetCartItems.as_view(), name='get-cart-items'),
@@ -129,6 +132,8 @@ urlpatterns = [
     path('stripe-payment/initiate/', StripeGroupPaymentAPIView.as_view() , name='initiate-payment'),
     path('payment/response/<int:user_id>/', SuccessPageAPIView.as_view(), name='payment-response'),
     path('payment-cancel/', CancelPageAPIView.as_view(), name='payment-cancel'),
+
+    path('webhooks/stripe/', payment_gateway.stripe_webhook, name='stripe-webhook'),
 
 #--------------------------CINTEPAY GATEWAY----------------------------------------------#
     path('cinetpay-payment/initiate/', CinetpayGroupPaymentAPIView.as_view() , name='cinetpay-initiate-payment'),

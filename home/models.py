@@ -455,20 +455,56 @@ class MyCart(models.Model):
     #     return f"{self.user.username} - {self.pass_category} for {self.event.event_name}"
 
 
+# class Order(models.Model):
+#     STATUS_CHOICES = [
+#         ('pending', 'Pending'),
+#         ('paid', 'Paid'),
+#         ('cancelled', 'Cancelled'),
+#     ]
+#     user = models.ForeignKey(CustomUser, on_delete=models.CASCADE, blank=True, null=True)
+#     total_amount = models.DecimalField(max_digits=10, decimal_places=2)
+#     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='pending')
+#     payment_done = models.BooleanField(default=False)
+#     payment_reference = models.CharField(max_length=100, blank=True, null=True)
+#     payment_stripe_token = models.CharField(max_length=255, default="", null=True, blank=True)
+#
+#
+#     def __str__(self):
+#         return f"Order {self.ordering} by {self.user.name}"
+
 class Order(models.Model):
     STATUS_CHOICES = [
         ('pending', 'Pending'),
         ('paid', 'Paid'),
         ('cancelled', 'Cancelled'),
     ]
+
     user = models.ForeignKey(CustomUser, on_delete=models.CASCADE, blank=True, null=True)
     total_amount = models.DecimalField(max_digits=10, decimal_places=2)
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='pending')
     payment_done = models.BooleanField(default=False)
     payment_reference = models.CharField(max_length=100, blank=True, null=True)
+    payment_stripe_token = models.CharField(max_length=255, default="", null=True, blank=True)
+    order_id = models.CharField(max_length=10, unique=True, editable=False)
+    # order_id = models.CharField(max_length=10, unique=True, editable=False, null=True, blank=True)
+
 
     def __str__(self):
-        return f"Order {self.ordering} by {self.user.name}"
+        return f"Order {self.order_id} by {self.user.name}"
+
+    def save(self, *args, **kwargs):
+        if not self.order_id:
+            self.order_id = self.generate_order_id()
+        super().save(*args, **kwargs)
+
+    def generate_order_id(self):
+        """ Génère un ID unique sous la forme XM-0123 """
+        prefix = "XM-"
+        while True:
+            unique_number = get_random_string(4, allowed_chars="0123456789")
+            new_order_id = f"{prefix}{unique_number}"
+            if not Order.objects.filter(order_id=new_order_id).exists():
+                return new_order_id
 
 
 class OrderItem(models.Model):
@@ -514,6 +550,7 @@ class Ticket(models.Model):
 class ETicket(Ticket):
     qr_code = models.UUIDField(default=uuid.uuid4, editable=False, unique=True)
     expiration_date = models.DateTimeField(null=True)
+    order = models.ForeignKey(Order, on_delete=models.CASCADE, related_name='etickets')  # Relation avec Order
 
 
 class PhysicalTicket(Ticket):

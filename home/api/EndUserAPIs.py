@@ -687,66 +687,234 @@ class EventPassPriceAPIView(generics.RetrieveAPIView):
         return Response(event_serializer_data, status=200)
     
 
+# class BuyPassAPIView(generics.CreateAPIView):
+#     """
+#     API view to purchase a pass for an event.
+#     """
+#     serializer_class = ETicketSerializer
+#     permission_classes = [IsAuthenticated,IsEndUser]
+#
+#     def create(self, request, *args, **kwargs):
+#         event_id = kwargs.get('event_id')
+#         pass_category = request.data.get('pass_category')
+#         quantity = request.data.get('quantity', 1)  # Default to 1 if quantity is not provided
+#
+#         try:
+#             event = Event.objects.get(id=event_id)
+#             pass_prices = EventPassCategory.objects.filter(event=event)
+#             event_pass = PassCategory.objects.get(id=pass_category)
+#
+#             pass_price = pass_prices.filter(pass_category=event_pass).first()
+#
+#             if not pass_price:
+#                 raise ValidationError({"error": "Invalid pass type for the event"}, code=400)
+#
+#         except Event.DoesNotExist:
+#             return Response({"error": "Event not found"}, status=status.HTTP_404_NOT_FOUND)
+#
+#         except PassCategory.DoesNotExist:
+#             return Response({"error": "Pass category not found"}, status=status.HTTP_404_NOT_FOUND)
+#
+#         except Exception as e:
+#             return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+#
+#         # Check if there are enough passes available
+#         available_passes = pass_price.quantity
+#         if available_passes < quantity:
+#             return Response({"error": "Insufficient passes available"}, status=status.HTTP_400_BAD_REQUEST)
+#
+#         # Get the authenticated user
+#         user = request.user
+#
+#         # Process the pass purchase
+#         pass_purchase = ETicket.objects.create(
+#             event=event,
+#             user=user,
+#             pass_type=event_pass.id,
+#             price=pass_price.price,
+#             quantity=quantity,
+#             is_payment_done=True
+#         )
+#
+#         # Decrease the available quantity of passes
+#         pass_price.quantity -= quantity
+#         pass_price.save()
+#
+#         # Serialize and return the response
+#         serializer = ETicketSerializer(pass_purchase)
+#         return Response({
+#             "success": "true",
+#             "msg": "",
+#             "response": {"data": serializer.data}
+#         }, status=status.HTTP_201_CREATED)
+
+# class BuyPassAPIView(generics.CreateAPIView):
+#     """
+#     API view to purchase multiple passes for multiple events in a single request.
+#     """
+#     serializer_class = ETicketSerializer
+#     permission_classes = [IsAuthenticated, IsEndUser]
+#
+#     def create(self, request, *args, **kwargs):
+#         passes_data = request.data  # Supposé être une liste de pass avec event_id
+#
+#         if not isinstance(passes_data, list):
+#             return Response({"error": "Invalid data format, expected a list"}, status=status.HTTP_400_BAD_REQUEST)
+#
+#         tickets = []  # Liste pour stocker les tickets créés
+#         updated_passes = []  # Liste pour suivre les mises à jour des stocks
+#         user = request.user
+#         if not request.user or not request.user.is_authenticated:
+#             return Response({"error": "User must be authenticated"}, status=status.HTTP_401_UNAUTHORIZED)
+#
+#         # Vérifier la disponibilité avant tout achat
+#         for pass_item in passes_data:
+#             event_id = pass_item.get("event_id")
+#             pass_category = pass_item.get("pass_category")
+#             quantity = pass_item.get("quantity", 1)
+#
+#             try:
+#                 event = Event.objects.get(id=event_id)
+#                 event_pass = PassCategory.objects.get(id=pass_category)
+#                 pass_price = EventPassCategory.objects.filter(event=event, pass_category=event_pass).first()
+#
+#                 if not pass_price:
+#                     return Response({"error": f"Invalid pass type {pass_category} for event {event_id}"}, status=status.HTTP_400_BAD_REQUEST)
+#
+#                 if pass_price.quantity < quantity:
+#                     return Response({"error": f"Insufficient passes available for category {pass_category} in event {event_id}"}, status=status.HTTP_400_BAD_REQUEST)
+#
+#                 updated_passes.append((event, event_pass, pass_price, quantity))
+#
+#             except Event.DoesNotExist:
+#                 return Response({"error": f"Event {event_id} not found"}, status=status.HTTP_404_NOT_FOUND)
+#             except PassCategory.DoesNotExist:
+#                 return Response({"error": f"Pass category {pass_category} not found"}, status=status.HTTP_404_NOT_FOUND)
+#
+#         # Si tout est validé, créer les tickets et mettre à jour les stocks
+#         for event, event_pass, pass_price, quantity in updated_passes:
+#             ticket = ETicket.objects.create(
+#                 event=event,
+#                 user=user,
+#                 pass_type=event_pass.id,
+#                 price=pass_price.price,
+#                 quantity=quantity,
+#                 is_payment_done=False
+#             )
+#             tickets.append(ticket)
+#
+#             # Mise à jour du stock
+#             pass_price.quantity -= quantity
+#             pass_price.save()
+#
+#         Order.objects.create(43
+#             user=user,
+#         )
+#
+#         # Sérialiser la réponse
+#         serializer = ETicketSerializer(tickets, many=True)
+#         return Response({
+#             "response": {"data": serializer.data},
+#             "":
+#         }, status=status.HTTP_201_CREATED)
+
 class BuyPassAPIView(generics.CreateAPIView):
     """
-    API view to purchase a pass for an event.
+    API view to purchase multiple passes for multiple events in a single request.
     """
     serializer_class = ETicketSerializer
-    permission_classes = [IsAuthenticated,IsEndUser]
+    permission_classes = [IsAuthenticated, IsEndUser]
 
     def create(self, request, *args, **kwargs):
-        event_id = kwargs.get('event_id')
-        pass_category = request.data.get('pass_category')
-        quantity = request.data.get('quantity', 1)  # Default to 1 if quantity is not provided
-        
-        try:
-            event = Event.objects.get(id=event_id)
-            pass_prices = EventPassCategory.objects.filter(event=event)
-            event_pass = PassCategory.objects.get(id=pass_category)
-            
-            pass_price = pass_prices.filter(pass_category=event_pass).first()
-            
-            if not pass_price:
-                raise ValidationError({"error": "Invalid pass type for the event"}, code=400)
+        # Récupérer les données de la requête
+        data = request.data
+        total_amount = data.get("total_amount")  # Montant total
+        passes_data = data.get("passes")  # Liste des passes
 
-        except Event.DoesNotExist:
-            return Response({"error": "Event not found"}, status=status.HTTP_404_NOT_FOUND)
+        if not isinstance(passes_data, list):
+            return Response({"error": "Invalid data format, expected a list for passes"}, status=status.HTTP_400_BAD_REQUEST)
 
-        except PassCategory.DoesNotExist:
-            return Response({"error": "Pass category not found"}, status=status.HTTP_404_NOT_FOUND)
+        if total_amount is None:
+            return Response({"error": "Total amount is required"}, status=status.HTTP_400_BAD_REQUEST)
 
-        except Exception as e:
-            return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
-        
-        # Check if there are enough passes available
-        available_passes = pass_price.quantity
-        if available_passes < quantity:
-            return Response({"error": "Insufficient passes available"}, status=status.HTTP_400_BAD_REQUEST)
+        tickets = []  # Liste pour stocker les tickets créés
+        updated_passes = []  # Liste pour suivre les mises à jour des stocks
+        calculated_total = 0  # Calculer le montant total en fonction des passes
 
-        # Get the authenticated user
         user = request.user
+        if not request.user or not request.user.is_authenticated:
+            return Response({"error": "User must be authenticated"}, status=status.HTTP_401_UNAUTHORIZED)
 
-        # Process the pass purchase
-        pass_purchase = ETicket.objects.create(
-            event=event,
-            user=user,
-            pass_type=event_pass.id,
-            price=pass_price.price,
-            quantity=quantity,
-            is_payment_done=True
-        )
+        # Vérifier la disponibilité avant tout achat
+        for pass_item in passes_data:
+            event_id = pass_item.get("event_id")
+            pass_category = pass_item.get("pass_category")
+            quantity = pass_item.get("quantity", 1)
 
-        # Decrease the available quantity of passes
-        pass_price.quantity -= quantity
-        pass_price.save()
+            try:
+                event = Event.objects.get(id=event_id)
+                event_pass = PassCategory.objects.get(id=pass_category)
+                pass_price = EventPassCategory.objects.filter(event=event, pass_category=event_pass).first()
 
-        # Serialize and return the response
-        serializer = ETicketSerializer(pass_purchase)
+                if not pass_price:
+                    return Response({"error": f"Invalid pass type {pass_category} for event {event_id}"}, status=status.HTTP_400_BAD_REQUEST)
+
+                if pass_price.quantity < quantity:
+                    return Response({"error": f"Insufficient passes available for category {pass_category} in event {event_id}"}, status=status.HTTP_400_BAD_REQUEST)
+
+                # Ajouter au montant total calculé
+                calculated_total += pass_price.price * quantity
+
+                updated_passes.append((event, event_pass, pass_price, quantity))
+
+            except Event.DoesNotExist:
+                return Response({"error": f"Event {event_id} not found"}, status=status.HTTP_404_NOT_FOUND)
+            except PassCategory.DoesNotExist:
+                return Response({"error": f"Pass category {pass_category} not found"}, status=status.HTTP_404_NOT_FOUND)
+
+        # Vérifier si le montant total calculé correspond à celui envoyé
+        if total_amount != calculated_total:
+            return Response({"error": "The total amount does not match the sum of the passes"}, status=status.HTTP_400_BAD_REQUEST)
+
+        # Créer la commande (Order)
+        order = Order.objects.create(user=user, total_amount=calculated_total, status='pending')
+
+        # Si tout est validé, créer les tickets et mettre à jour les stocks
+        for event, event_pass, pass_price, quantity in updated_passes:
+            ticket = ETicket.objects.create(
+                event=event,
+                user=user,
+                pass_category=event_pass,
+                price=pass_price.price,
+                quantity=quantity,
+                is_payment_done=False,
+                order=order  # Lier chaque ticket à la commande
+            )
+            tickets.append(ticket)
+
+            # Mise à jour du stock
+            pass_price.quantity -= quantity
+            pass_price.save()
+
+        # Sérialiser la réponse
+        ticket_serializer = ETicketSerializer(tickets, many=True)
+        order_data = {
+            "order_id": order.order_id,
+            "total_amount": order.total_amount,
+            "status": order.status,
+            "payment_done": order.payment_done
+        }
+
         return Response({
             "success": "true",
             "msg": "",
-            "response": {"data": serializer.data}
+            "response": {
+                "data": ticket_serializer.data,
+                "order": order_data  # Inclure les informations de la commande dans la réponse
+            }
         }, status=status.HTTP_201_CREATED)
+
+
 
 
 # Custom JSON encoder to serialize datetime objects
@@ -1053,44 +1221,44 @@ class RemoveOrIncreaseProductFromCartView(generics.DestroyAPIView):
     # authentication_classes = (TokenAuthentication,)
     permission_classes = [IsAuthenticated,IsEndUser]
 
-    def put(self, request, *args, **kwargs):
-        """
-        Increase the quantity of a product in the user's cart.
-        """
-        user = request.user
-
-        try:
-            user = CustomUser.objects.get(id=user.id)
-            cart_item = MyCart.objects.get(pk=kwargs['pk'],user=user)
-            event_passes = EventPass.objects.filter(event=cart_item.event)
-            pass_price = PassPrice.objects.filter(event=cart_item.event, pass_type=cart_item.pass_type).first()
-
-            if not pass_price:
-                return Response({"message": "Pass price is empty"}, status=status.HTTP_204_NO_CONTENT)
-
-
-        except MyCart.DoesNotExist:
-            return Response({'detail': 'Cart item not found'}, status=status.HTTP_404_NOT_FOUND)
-
-
-        # Get the requested quantity from the request data
-        requested_quantity =int(request.data.get('quantity'))
-        if event_passes.exists():
-            event_pass = event_passes.first()
-
-        # Check if the requested quantity is greater than the available quantity
-            if requested_quantity is not None and requested_quantity > 0 and requested_quantity > event_pass.pass_total_quantity:
-                return Response({'detail': 'Requested quantity exceeds available quantity'}, status=status.HTTP_400_BAD_REQUEST)
-
-            # Update the cart item quantity
-            cart_item.quantity += requested_quantity
-            cart_item.price =pass_price.price_with_qr * int(cart_item.quantity)
-
-            cart_item.save()
-            # serializer = AddProductToCartSerializer(cart_item)
-            return Response({"message":"Done"},status=status.HTTP_201_CREATED)
-        else:
-            return Response({'detail': 'EventPass not found'}, status=status.HTTP_404_NOT_FOUND)
+    # def put(self, request, *args, **kwargs):
+    #     """
+    #     Increase the quantity of a product in the user's cart.
+    #     """
+    #     user = request.user
+    #
+    #     try:
+    #         user = CustomUser.objects.get(id=user.id)
+    #         cart_item = MyCart.objects.get(pk=kwargs['pk'],user=user)
+    #         event_passes = EventPass.objects.filter(event=cart_item.event)
+    #         pass_price = PassPrice.objects.filter(event=cart_item.event, pass_type=cart_item.pass_type).first()
+    #
+    #         if not pass_price:
+    #             return Response({"message": "Pass price is empty"}, status=status.HTTP_204_NO_CONTENT)
+    #
+    #
+    #     except MyCart.DoesNotExist:
+    #         return Response({'detail': 'Cart item not found'}, status=status.HTTP_404_NOT_FOUND)
+    #
+    #
+    #     # Get the requested quantity from the request data
+    #     requested_quantity =int(request.data.get('quantity'))
+    #     if event_passes.exists():
+    #         event_pass = event_passes.first()
+    #
+    #     # Check if the requested quantity is greater than the available quantity
+    #         if requested_quantity is not None and requested_quantity > 0 and requested_quantity > event_pass.pass_total_quantity:
+    #             return Response({'detail': 'Requested quantity exceeds available quantity'}, status=status.HTTP_400_BAD_REQUEST)
+    #
+    #         # Update the cart item quantity
+    #         cart_item.quantity += requested_quantity
+    #         cart_item.price =pass_price.price_with_qr * int(cart_item.quantity)
+    #
+    #         cart_item.save()
+    #         # serializer = AddProductToCartSerializer(cart_item)
+    #         return Response({"message":"Done"},status=status.HTTP_201_CREATED)
+    #     else:
+    #         return Response({'detail': 'EventPass not found'}, status=status.HTTP_404_NOT_FOUND)
     def delete(self, request, *args, **kwargs):
         """
         Remove a product from the user's cart.
@@ -1112,43 +1280,43 @@ class DecreaseProductFromCartView(generics.DestroyAPIView):
     """
     # authentication_classes = (TokenAuthentication,)
     permission_classes = [IsAuthenticated,IsEndUser]
-    def put(self, request, *args, **kwargs):
-        """
-        Decrease the quantity of a product in the user's cart.
-        """
-        user = request.user
-
-        try:
-            user = CustomUser.objects.get(id=user.id)
-            cart_item = MyCart.objects.get(pk=kwargs['pk'],user=user)
-            event_passes = EventPass.objects.filter(event=cart_item.event)
-            pass_price = PassPrice.objects.filter(event=cart_item.event, pass_type=cart_item.pass_type).first()
-
-            if not pass_price:
-                return Response({"message": "Pass price is empty"}, status=status.HTTP_204_NO_CONTENT)
-
-        except MyCart.DoesNotExist:
-            return Response({'detail': 'Cart item not found'}, status=status.HTTP_404_NOT_FOUND)
-
-        # Get the requested quantity from the request data
-        requested_quantity =int(request.data.get('quantity'))
-        print(requested_quantity)
-        if event_passes.exists():
-            event_pass = event_passes.first()
-
-
-             # Check if the requested quantity is greater than the available quantity
-            if requested_quantity is not None and requested_quantity > 0 and  requested_quantity > event_pass.pass_total_quantity:
-                return Response({'detail': 'Requested quantity exceeds available quantity'}, status=status.HTTP_400_BAD_REQUEST)
-
-             # Update the cart item quantity
-            cart_item.quantity -= requested_quantity
-            cart_item.price = pass_price.price_with_qr * int(cart_item.quantity)
-            cart_item.save()
-            # serializer = AddProductToCartSerializer(cart_item)
-            return Response({"message":"Done"},status=status.HTTP_201_CREATED)
-        else:
-            return Response({'detail': 'EventPass not found'}, status=status.HTTP_404_NOT_FOUND)
+    # def put(self, request, *args, **kwargs):
+    #     """
+    #     Decrease the quantity of a product in the user's cart.
+    #     """
+    #     user = request.user
+    #
+    #     try:
+    #         user = CustomUser.objects.get(id=user.id)
+    #         cart_item = MyCart.objects.get(pk=kwargs['pk'],user=user)
+    #         event_passes = EventPass.objects.filter(event=cart_item.event)
+    #         pass_price = PassPrice.objects.filter(event=cart_item.event, pass_type=cart_item.pass_type).first()
+    #
+    #         if not pass_price:
+    #             return Response({"message": "Pass price is empty"}, status=status.HTTP_204_NO_CONTENT)
+    #
+    #     except MyCart.DoesNotExist:
+    #         return Response({'detail': 'Cart item not found'}, status=status.HTTP_404_NOT_FOUND)
+    #
+    #     # Get the requested quantity from the request data
+    #     requested_quantity =int(request.data.get('quantity'))
+    #     print(requested_quantity)
+    #     if event_passes.exists():
+    #         event_pass = event_passes.first()
+    #
+    #
+    #          # Check if the requested quantity is greater than the available quantity
+    #         if requested_quantity is not None and requested_quantity > 0 and  requested_quantity > event_pass.pass_total_quantity:
+    #             return Response({'detail': 'Requested quantity exceeds available quantity'}, status=status.HTTP_400_BAD_REQUEST)
+    #
+    #          # Update the cart item quantity
+    #         cart_item.quantity -= requested_quantity
+    #         cart_item.price = pass_price.price_with_qr * int(cart_item.quantity)
+    #         cart_item.save()
+    #         # serializer = AddProductToCartSerializer(cart_item)
+    #         return Response({"message":"Done"},status=status.HTTP_201_CREATED)
+    #     else:
+    #         return Response({'detail': 'EventPass not found'}, status=status.HTTP_404_NOT_FOUND)
 
 
 # class TypeOfEventList(APIView):
@@ -1356,26 +1524,26 @@ class SendGiftAPI(APIView):
     API view to send a gift to another user.
     """
     permission_classes = [IsAuthenticated,IsEndUser]
-    def post(self, request):
-        """
-        Send a gift to another user.
-        """
-        serializer = SendGiftSerializer(data=request.data)
-        if serializer.is_valid():
-            # Create the gift entry
-            user  = EndUserDetail.objects.get(user=request.user)
-            gift = serializer.save(gifter=user)
-            ticket_id = serializer.validated_data['ticket_id']
-            try:
-                ticket_obj = PassPurchase.objects.get(user=request.user,id=ticket_id)
-                ticket_obj.user = None
-                ticket_obj.save()
-            except PassPurchase.DoesNotExist:
-                return Response({'message':"ticket does not exist"}, status=status.HTTP_404_NOT_FOUND)
-
-            # Send email to the receiver
-            receiver_email = serializer.validated_data['reciever_email']
-            send_gift_email(gift, receiver_email)
-
-            return Response(serializer.data, status=status.HTTP_201_CREATED)
-        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+    # def post(self, request):
+    #     """
+    #     Send a gift to another user.
+    #     """
+    #     serializer = SendGiftSerializer(data=request.data)
+    #     if serializer.is_valid():
+    #         # Create the gift entry
+    #         user  = EndUserDetail.objects.get(user=request.user)
+    #         gift = serializer.save(gifter=user)
+    #         ticket_id = serializer.validated_data['ticket_id']
+    #         try:
+    #             ticket_obj = PassPurchase.objects.get(user=request.user,id=ticket_id)
+    #             ticket_obj.user = None
+    #             ticket_obj.save()
+    #         except PassPurchase.DoesNotExist:
+    #             return Response({'message':"ticket does not exist"}, status=status.HTTP_404_NOT_FOUND)
+    #
+    #         # Send email to the receiver
+    #         receiver_email = serializer.validated_data['reciever_email']
+    #         send_gift_email(gift, receiver_email)
+    #
+    #         return Response(serializer.data, status=status.HTTP_201_CREATED)
+    #     return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
