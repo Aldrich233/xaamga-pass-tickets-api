@@ -830,6 +830,8 @@ class BuyPassAPIView(generics.CreateAPIView):
         data = request.data
         total_amount = data.get("total_amount")  # Montant total
         passes_data = data.get("passes")  # Liste des passes
+        # user_id = data.get("user_id")  # Liste des passes
+        user = request.user
 
         if not isinstance(passes_data, list):
             return Response({"error": "Invalid data format, expected a list for passes"}, status=status.HTTP_400_BAD_REQUEST)
@@ -837,13 +839,16 @@ class BuyPassAPIView(generics.CreateAPIView):
         if total_amount is None:
             return Response({"error": "Total amount is required"}, status=status.HTTP_400_BAD_REQUEST)
 
+
+        if not request.user:
+            return Response({"error": "User must be authenticated"}, status=status.HTTP_401_UNAUTHORIZED)
+
+
         tickets = []  # Liste pour stocker les tickets créés
         updated_passes = []  # Liste pour suivre les mises à jour des stocks
         calculated_total = 0  # Calculer le montant total en fonction des passes
 
-        user = request.user
-        if not request.user or not request.user.is_authenticated:
-            return Response({"error": "User must be authenticated"}, status=status.HTTP_401_UNAUTHORIZED)
+
 
         # Vérifier la disponibilité avant tout achat
         for pass_item in passes_data:
@@ -879,8 +884,38 @@ class BuyPassAPIView(generics.CreateAPIView):
         # Créer la commande (Order)
         order = Order.objects.create(user=user, total_amount=calculated_total, status='pending')
 
+
+
         # Si tout est validé, créer les tickets et mettre à jour les stocks
+        # for event, event_pass, pass_price, quantity in updated_passes:
+        #     ticket = ETicket.objects.create(
+        #         event=event,
+        #         user=user,
+        #         pass_category=event_pass,
+        #         price=pass_price.price,
+        #         quantity=quantity,
+        #         is_payment_done=False,
+        #         order=order  # Lier chaque ticket à la commande
+        #     )
+        #     tickets.append(ticket)
+        #
+        #     # Mise à jour du stock
+        #     pass_price.quantity -= quantity
+        #     pass_price.save()
+
+        # Si tout est validé, créer les OrderItems et les tickets, puis mettre à jour les stocks
+
         for event, event_pass, pass_price, quantity in updated_passes:
+            # Créer l'OrderItem correspondant
+            order_item = OrderItem.objects.create(
+                order=order,
+                event=event,
+                pass_category=event_pass,
+                quantity=quantity,
+                price=pass_price.price
+            )
+
+            # Maintenant, on peut créer le ETicket en le liant à OrderItem
             ticket = ETicket.objects.create(
                 event=event,
                 user=user,
@@ -888,7 +923,8 @@ class BuyPassAPIView(generics.CreateAPIView):
                 price=pass_price.price,
                 quantity=quantity,
                 is_payment_done=False,
-                order=order  # Lier chaque ticket à la commande
+                order=order,  # Lier à la commande
+                order_item=order_item  # Lier à l'OrderItem (OBLIGATOIRE)
             )
             tickets.append(ticket)
 
@@ -896,7 +932,8 @@ class BuyPassAPIView(generics.CreateAPIView):
             pass_price.quantity -= quantity
             pass_price.save()
 
-        # Sérialiser la réponse
+
+    # Sérialiser la réponse
         ticket_serializer = ETicketSerializer(tickets, many=True)
         order_data = {
             "order_id": order.order_id,
@@ -906,8 +943,6 @@ class BuyPassAPIView(generics.CreateAPIView):
         }
 
         return Response({
-            "success": "true",
-            "msg": "",
             "response": {
                 "data": ticket_serializer.data,
                 "order": order_data  # Inclure les informations de la commande dans la réponse

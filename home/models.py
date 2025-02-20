@@ -486,6 +486,8 @@ class Order(models.Model):
     payment_reference = models.CharField(max_length=100, blank=True, null=True)
     payment_stripe_token = models.CharField(max_length=255, default="", null=True, blank=True)
     order_id = models.CharField(max_length=10, unique=True, editable=False)
+    created_date = models.DateTimeField(auto_now_add=True, null=True, blank=True)
+    due_date = models.DateTimeField(auto_now=True,null=True, blank=True)
     # order_id = models.CharField(max_length=10, unique=True, editable=False, null=True, blank=True)
 
 
@@ -514,6 +516,7 @@ class OrderItem(models.Model):
     quantity = models.PositiveIntegerField()
     price = models.DecimalField(max_digits=10, decimal_places=2)
 
+
     def __str__(self):
         return f"{self.quantity} x {self.pass_category} for {self.event} in Order {self.order.name}"
 
@@ -527,10 +530,13 @@ class Ticket(models.Model):
     pass_category = models.ForeignKey(PassCategory, on_delete=models.CASCADE, related_name='%(class)s_ticket',
                                       null=True)
     price = models.DecimalField(max_digits=10, decimal_places=2)
+    quantity = models.CharField(max_length=12, default=1)
     purchase_date = models.DateTimeField(null=True)
     is_payment_done = models.BooleanField(default=False)
     is_used = models.BooleanField(default=False)
     control_date = models.DateTimeField(null=True)
+    created_date = models.DateTimeField(auto_now_add=True, null=True, blank=True)
+    due_date = models.DateTimeField(auto_now=True,null=True, blank=True)
 
     class Meta:
         abstract = True
@@ -550,7 +556,8 @@ class Ticket(models.Model):
 class ETicket(Ticket):
     qr_code = models.UUIDField(default=uuid.uuid4, editable=False, unique=True)
     expiration_date = models.DateTimeField(null=True)
-    order = models.ForeignKey(Order, on_delete=models.CASCADE, related_name='etickets')  # Relation avec Order
+    order = models.ForeignKey(Order, on_delete=models.CASCADE, related_name='etickets', null=True, blank=True)
+
 
 
 class PhysicalTicket(Ticket):
