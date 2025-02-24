@@ -23,93 +23,7 @@ import stripe
 
 STRIPE_WEBHOOK_SECRET = "whsec_aee52ec1cbc7143659007e3aee8028044256761930315b877c8b5ae869f8f920"
 
-# class StripeGroupPaymentAPIView(APIView):
-#
-#     def post(self, request):
-#         logged_in_user = request.data.get('user_id')
-#         user = get_object_or_404(EndUserDetail, user=logged_in_user)
-#         events_amount = request.data.get('events_amount')
-#         events_amount = request.data.get('events_amount')
-#         if not events_amount:
-#             return Response({"error": "Missing 'events_amount' in request data"}, status=status.HTTP_400_BAD_REQUEST)
-#
-#         customer_name = user.first_name
-#         customer_surname = user.second_name
-#         customer_number = user.telephone_number
-#         customer_birthday = "1998-05-20"
-#         customer_location = user.address
-#         user_id = user.id
-#         url = reverse('payment-response', kwargs={'user_id': user_id})
-#         success_url = request.build_absolute_uri(url)
-#         print(success_url)
-#         cancel_url = request.build_absolute_uri(reverse('payment-cancel'))
-#
-#         order_id = uuid.uuid4().hex
-#         missing_fields = []
-#
-#         # Check if any of the required fields are empty
-#         if not customer_name:
-#             missing_fields.append("first_name")
-#         if not customer_surname:
-#             missing_fields.append("second_name")
-#         if not customer_number:
-#             missing_fields.append("telephone_number")
-#         if not customer_location:
-#             missing_fields.append("address")
-#
-#         # If any fields are missing, return a response with the missing field names
-#         if missing_fields:
-#             return Response({"error": "Required user fields are missing", "missing_fields": missing_fields}, status=status.HTTP_400_BAD_REQUEST)
-#
-#         # Check if any of the required fields are empty
-#
-#
-#         payload = {
-#             "customer_name": customer_name,
-#             "customer_surname": customer_surname,
-#             "customer_number": customer_number,
-#             "customer_birthday": customer_birthday,
-#             "customer_location": customer_location,
-#             "cancel_url": cancel_url,
-#             "success_url": success_url,
-#             "events_amount": events_amount,
-#             "order_id": order_id
-#         }
-#         print(payload)
-#         headers = {
-#             'X-API-Key': '81bdf51c909897d5cb7755ab880fe52e',
-#             'Content-Type': 'application/json'
-#         }
-#
-#         url = 'https://www.xaamga-cashless.tv/paywall/api/stripe/groupPayment/'
-#
-#         try:
-#             response = requests.post(url, json=[payload], headers=headers)
-#             print(response.status_code)
-#             print(response.text)
-#             if response.status_code == 200:
-#                 response_text = response.text
-#                 print(response_text)
-#                 response_data = json.loads(response_text.replace('\\"', '"'))
-#
-#                 if isinstance(response_data, list) and len(response_data) > 0:
-#                     callback = response_data[0].get('callback', {})
-#                     payment_url = callback.get('payment_url')
-#                     print(payment_url)
-#                     payment_token = callback.get('payment_token')
-#
-#                     # payment_eTicket_instance =
-#
-#                     return Response({
-#                         'payment_url': payment_url,
-#                         'payment_token': payment_token,
-#                     })
-#                 else:
-#                     return Response({"error": "Invalid response format"}, status=status.HTTP_400_BAD_REQUEST)
-#             else:
-#                 return Response({"error": "Payment failed"}, status=status.HTTP_400_BAD_REQUEST)
-#         except requests.RequestException as e:
-#             return Response({"error": f"Request failed: {str(e)}"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
 
 class StripeGroupPaymentAPIView(APIView):
 
@@ -253,353 +167,48 @@ def stripe_webhook(request):
     if not session_id:
         return JsonResponse({"error": "Session ID missing"}, status=400)
 
-    # Récupération de la transaction liée à l'événement en interrogeant les sous-classes de Ticket
-    transaction = get_object_or_404(Ticket.objects.select_subclasses(), payment_token=session_id)
+    # Récupération de la commande liée à la session Stripe
+    order = get_object_or_404(Order, payment_stripe_token=session_id)
 
-    # Récupération de la commande liée à la transaction
-    order = get_object_or_404(Order, payment_token=session_id)
+    # Récupérer tous les OrderItem associés à cette commande
+    order_items = order.items.all()
 
-    # Gestion des événements Stripe
-    try:
-        if event_type == "checkout.session.completed":
-            # Paiement effectué
-            order.payment_done = True
-            order.status = 'paid'
-            transaction.is_payment_done = True
+    # Pour chaque OrderItem, récupérer les Tickets associés et mettre à jour is_payment_done
+    for order_item in order_items:
+        # Récupérer les Tickets associés à cet OrderItem
+        tickets = []
+        for subclass in Ticket.__subclasses__():
+            tickets.extend(subclass.objects.filter(order_item=order_item))
 
-        elif event_type == "checkout.session.async_payment_succeeded":
-            # Paiement réussi de manière asynchrone
-            order.payment_done = True
-            order.status = 'paid'
-            transaction.is_payment_done = True
+        # Mettre à jour is_payment_done pour chaque Ticket
+        for ticket in tickets:
+            ticket.is_payment_done = True
+            ticket.save()
 
-        elif event_type == "checkout.session.async_payment_failed":
-            # Paiement échoué
-            order.payment_done = False
-            order.status = 'failed'
-            transaction.is_payment_done = False
+    # Mettre à jour le statut de l'Order
+    if event_type == "checkout.session.completed":
+        order.payment_done = True
+        order.status = 'paid'
+    elif event_type == "checkout.session.async_payment_succeeded":
+        order.payment_done = True
+        order.status = 'paid'
+    elif event_type == "checkout.session.async_payment_failed":
+        order.payment_done = False
+        order.status = 'failed'
+    elif event_type == "checkout.session.expired":
+        order.payment_done = False
+        order.status = 'expired'
+    else:
+        # Événement non pris en charge
+        return JsonResponse({"status": "event ignored"}, status=200)
 
-        elif event_type == "checkout.session.expired":
-            # Session expirée
-            order.payment_done = False
-            order.status = 'expired'
-            transaction.is_payment_done = False
+    # Sauvegarder les modifications de l'Order
+    order.save()
 
-        else:
-            # Événement non pris en charge
-            return JsonResponse({"status": "event ignored"}, status=200)
-
-        # Sauvegarde des modifications
-        order.save()
-        transaction.save()
-
-        return JsonResponse({"status": "success"}, status=200)
-
-    except Exception as e:
-        return JsonResponse({"error": f"Unexpected error: {str(e)}"}, status=500)
+    return JsonResponse({"status": "success"}, status=200)
 
 
 
-# def stripe_webhook(request):
-#     payload = request.body
-#     sig_header = request.headers.get("Stripe-Signature")
-#
-#     # Vérification des entêtes nécessaires
-#     if not sig_header or not payload:
-#         return JsonResponse({"error": "Missing required headers or payload"}, status=400)
-#
-#     try:
-#         # Construction de l'événement Stripe
-#         event = stripe.Webhook.construct_event(payload, sig_header, STRIPE_WEBHOOK_SECRET)
-#     except Exception as e:
-#         return JsonResponse({"error": f"Webhook validation failed: {str(e)}"}, status=400)
-#
-#     # Extraction des données de l'événement
-#     event_type = event.get("type")
-#     session = event.get("data", {}).get("object", {})
-#     session_id = session.get("id")
-#
-#     if not session_id:
-#         return JsonResponse({"error": "Session ID missing"}, status=400)
-#
-#     # Récupération de la transaction liée à l'événement
-#     transaction = get_object_or_404(Ticket, payment_token=session_id)
-#
-#     # Récupération de la commande liée à la transaction
-#     order = get_object_or_404(Order, payment_token=session_id)
-#
-#     # Gestion des événements Stripe
-#     try:
-#         if event_type == "checkout.session.completed":
-#             # Paiement effectué
-#             order.payment_done = True
-#             order.status = 'paid'
-#             transaction.is_payment_done = True
-#
-#         elif event_type == "checkout.session.async_payment_succeeded":
-#             # Paiement réussi de manière asynchrone
-#             order.payment_done = True
-#             order.status = 'paid'
-#             transaction.is_payment_done = True
-#
-#         elif event_type == "checkout.session.async_payment_failed":
-#             # Paiement échoué
-#             order.payment_done = False
-#             order.status = 'failed'
-#             transaction.is_payment_done = False
-#
-#         elif event_type == "checkout.session.expired":
-#             # Session expirée
-#             order.payment_done = False
-#             order.status = 'expired'
-#             transaction.is_payment_done = False
-#
-#         else:
-#             # Événement non pris en charge
-#             return JsonResponse({"status": "event ignored"}, status=200)
-#
-#         # Sauvegarde des modifications
-#         order.save()
-#         transaction.save()
-#
-#         return JsonResponse({"status": "success"}, status=200)
-#
-#     except Exception as e:
-#         return JsonResponse({"error": f"Unexpected error: {str(e)}"}, status=500)
-
-
-# def stripe_webhook(request):
-#     payload = request.body
-#     sig_header = request.headers.get("Stripe-Signature")
-#
-#     # Vérification de la signature et construction de l'événement
-#     if not sig_header or not payload:
-#         print("Error: Missing required headers or payload")  # Ajout du print
-#         return JsonResponse({"error": "Missing required headers or payload"}, status=400)
-#
-#     try:
-#         event = stripe.Webhook.construct_event(payload, sig_header, STRIPE_WEBHOOK_SECRET)
-#     except Exception as e:
-#         print(f"Webhook validation failed: {str(e)}")  # Affichage de l'erreur
-#         return JsonResponse({"error": "Webhook validation failed"}, status=400)
-#
-#     # Extraction des données de l'événement
-#     event_type = event.get("type")
-#     session = event.get("data", {}).get("object", {})
-#     session_id = session.get("id")
-#
-#     if not session_id:
-#         print("Error: Session ID missing")  # Ajout du print
-#         return JsonResponse({"error": "Session ID missing"}, status=400)
-#
-#     # Récupération de la transaction liée à l'événement
-#     try:
-#         transaction = Ticket.objects.get(payment_token=session_id)
-#     except Ticket.DoesNotExist as e:
-#         print(f"Transaction not found: {str(e)}")  # Affichage de l'erreur
-#         return JsonResponse({"error": "Transaction not found"}, status=404)
-#
-#     # Récupération de la commande liée à la transaction
-#     try:
-#         order = Order.objects.get(payment_token=session_id)
-#     except Order.DoesNotExist as e:
-#         print(f"Order not found: {str(e)}")  # Affichage de l'erreur
-#         return JsonResponse({"error": "Order not found"}, status=404)
-#
-#     # Gestion des événements Stripe et mise à jour des statuts
-#     try:
-#         if event_type == "checkout.session.completed":
-#             # Marquer le paiement comme effectué dans la commande et le ticket
-#             order.payment_done = True
-#             order.status = 'paid'
-#             order.is_payment_done = True
-#             transaction.is_payment_done = True
-#         elif event_type == "checkout.session.async_payment_succeeded":
-#             # Paiement réussi mais de manière asynchrone
-#             order.payment_done = True
-#             order.status = 'paid'
-#             order.is_payment_done = True
-#             transaction.is_payment_done = True
-#         elif event_type == "checkout.session.async_payment_failed":
-#             # Paiement échoué
-#             order.payment_done = False
-#             order.status = 'failed'
-#             order.is_payment_done = False
-#             transaction.is_payment_done = False
-#         elif event_type == "checkout.session.expired":
-#             # Session expirée
-#             order.payment_done = False
-#             order.status = 'expired'
-#             order.is_payment_done = False
-#             transaction.is_payment_done = False
-#         else:
-#             # Événement non pris en charge
-#             print(f"Event ignored: {event_type}")  # Ajout du print
-#             return JsonResponse({"status": "event ignored"}, status=200)
-#
-#         # Sauvegarde des modifications dans les modèles
-#         order.save()
-#         transaction.save()
-#         return JsonResponse({"status": "success"}, status=200)
-#
-#     except Exception as e:
-#         print(f"Unexpected error: {str(e)}")  # Affichage de l'erreur
-#         return JsonResponse({"error": f"Unexpected error: {str(e)}"}, status=500)
-
-
-
-
-# def stripe_webhook(request):
-#     payload = request.body
-#     sig_header = request.headers.get("Stripe-Signature")
-#
-#     # logger.info(f"Payload reçu : {payload}")
-#     # logger.info(f"Signature Stripe : {sig_header}")
-#
-#     # Vérification de la signature et construction de l'événement
-#     if not sig_header or not payload:
-#         # logger.error("Signature ou payload manquant.")
-#         return JsonResponse({"error": "Missing required headers or payload"}, status=400)
-#
-#     try:
-#         event = stripe.Webhook.construct_event(payload, sig_header, STRIPE_WEBHOOK_SECRET)
-#         # logger.info(f"Événement Stripe validé : {event['type']}")
-#     except Exception as e:
-#         # logger.error(f"Erreur lors de la validation du webhook : {str(e)}")
-#         return JsonResponse({"error": "Webhook validation failed"}, status=400)
-#
-#     # Extraction des données de l'événement
-#     event_type = event.get("type")
-#     session = event.get("data", {}).get("object", {})
-#     session_id = session.get("id")
-#
-#     if not session_id:
-#         # logger.error("Session ID manquant ou non récupérable pour cet événement.")
-#         return JsonResponse({"error": "Session ID missing"}, status=400)
-#
-#     # Récupération de la transaction
-#     transaction = None
-#     for _ in range(5):  # Réessaye 5 fois avec un délai de 2 secondes
-#         try:
-#             transaction = Ticket.objects.get(payment_token=session_id)
-#             # logger.info(f"Transaction trouvée : {transaction.payment_token}")
-#             break
-#         except Ticket.DoesNotExist:
-#             # logger.warning(f"Tentative {_+1}: Transaction introuvable pour session_id : {session_id}")
-#             time.sleep(2)
-#
-#     if not transaction:
-#         # logger.error(f"Transaction introuvable après plusieurs tentatives pour session_id : {session_id}")
-#         return JsonResponse({"error": "Transaction not found"}, status=404)
-#
-#     # Récupération de la commande
-#     try:
-#         order = Order.objects.get(payment_token=session_id)
-#         # logger.info(f"Commande trouvée : {order.order_id}")
-#     except Order.DoesNotExist:
-#         # logger.error(f"Commande introuvable pour session_id : {session_id}")
-#         return JsonResponse({"error": "Order not found"}, status=404)
-#
-#     # Gestion des événements configurés
-#     try:
-#         if event_type == "checkout.session.completed":
-#             transaction.order_payment_status = "paid"
-#             order.payment_status = "paid"
-#             # logger.info("Paiement marqué comme réussi (completed).")
-#         elif event_type == "checkout.session.async_payment_succeeded":
-#             transaction.order_payment_status = "paid"
-#             order.payment_status = "paid"
-#             # logger.info("Paiement marqué comme réussi (async_payment_succeeded).")
-#         elif event_type == "checkout.session.async_payment_failed":
-#             transaction.order_payment_status = "failed"
-#             order.payment_status = "failed"
-#             # logger.info("Paiement marqué comme échoué (async_payment_failed).")
-#         elif event_type == "checkout.session.expired":
-#             transaction.order_payment_status = "expired"
-#             order.payment_status = "expired"
-#             # logger.info("Session expirée (expired).")
-#         else:
-#             # logger.warning(f"Événement non pris en charge : {event_type}")
-#             return JsonResponse({"status": "event ignored"}, status=200)
-#
-#         # Sauvegarde des modifications
-#         transaction.save()
-#         order.save()
-#         # logger.info(f"Transaction et commande mises à jour avec succès pour la session {session_id}")
-#         return JsonResponse({"status": "success"}, status=200)
-#
-#     except Exception as e:
-#         # logger.error(f"Erreur inattendue : {str(e)}")
-#         return JsonResponse({"error": f"Unexpected error: {str(e)}"}, status=500)
-
-
-
-# class SuccessPageAPIView(APIView):
-#     def get(self, request, user_id):
-#         user_id = user_id
-
-#         if not user_id:
-#             return Response({"error": "User ID is required"}, status=status.HTTP_400_BAD_REQUEST)
-
-#         try:
-#             user = EndUserDetail.objects.get(id=user_id)
-#             print(user.user.id)
-#             cart = MyCart.objects.filter(user=user.user.id)
-#             custom_user = CustomUser.objects.get(id = user.user.id)
-
-#             pass_purchases = []
-
-#             for cart_item in cart:
-#                 event_id = cart_item.event_id
-#                 pass_type = cart_item.pass_type
-#                 quantity = cart_item.quantity
-#                 price = cart_item.price
-
-#                 try:
-#                     event = Event.objects.get(id=event_id)
-#                 except Event.DoesNotExist:
-#                     raise ValidationError({"error": f"Event with ID {event_id} not found"}, code=404)
-
-#                 try:
-#                     updated_price = price
-#                     total_price = updated_price * quantity
-#                 except EventPassCategory.DoesNotExist:
-#                     raise ValidationError({"error": f"Pass type '{pass_type}' not found for this event"}, code=404)
-
-#                 try:
-#                     event_pass = EventPassCategory.objects.get(event=event)
-#                 except EventPassCategory.DoesNotExist:
-#                     raise ValidationError({"error": "Event passes not found for this event"}, code=404)
-
-#                 available_quantity = getattr(event_pass, f"{pass_type.lower()}_pass")
-#                 if available_quantity < quantity:
-#                     raise ValidationError({"error": f"Insufficient '{pass_type}' passes available"}, code=400)
-
-#                 pass_purchase = ETicket.objects.create(
-#                     event=event,
-#                     user=custom_user,
-#                     pass_type=pass_type,
-#                     price=total_price,
-#                     quantity=quantity,
-#                     is_payment_done=True
-#                 )
-
-#                 # Decrease the available quantity of the specific pass type
-#                 setattr(event_pass, f"{pass_type.lower()}_pass", available_quantity - quantity)
-#                 event_pass.save()
-
-#                 pass_purchases.append(pass_purchase)
-#             cart.delete()
-#             return redirect('http://localhost:4200')
-
-#         except EndUserDetail.DoesNotExist:
-#             raise ValidationError({"error": f"User with ID {user_id} not found"}, code=404)
-
-#         except MyCart.DoesNotExist:
-#             raise ValidationError({"error": f"Cart for user with ID {user_id} not found"}, code=404)
-
-#         except Exception as e:
-#             return Response({"error": f"An error occurred: {str(e)}"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
 class SuccessPageAPIView(APIView):

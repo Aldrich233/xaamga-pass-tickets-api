@@ -643,7 +643,8 @@ def reset_password(request):
     except OTP.DoesNotExist:
         return Response({'message': 'Invalid OTP.'}, status=status.HTTP_400_BAD_REQUEST)
        
-       
+
+
 class EventPassPriceAPIView(generics.RetrieveAPIView):
     """
     Retrieve the event details along with the associated pass prices.
@@ -818,19 +819,19 @@ class EventPassPriceAPIView(generics.RetrieveAPIView):
 #             "":
 #         }, status=status.HTTP_201_CREATED)
 
+
 class BuyPassAPIView(generics.CreateAPIView):
     """
     API view to purchase multiple passes for multiple events in a single request.
     """
     serializer_class = ETicketSerializer
-    permission_classes = [IsAuthenticated, IsEndUser]
+    permission_classes = [IsAuthenticated]
 
     def create(self, request, *args, **kwargs):
         # Récupérer les données de la requête
         data = request.data
         total_amount = data.get("total_amount")  # Montant total
         passes_data = data.get("passes")  # Liste des passes
-        # user_id = data.get("user_id")  # Liste des passes
         user = request.user
 
         if not isinstance(passes_data, list):
@@ -839,18 +840,14 @@ class BuyPassAPIView(generics.CreateAPIView):
         if total_amount is None:
             return Response({"error": "Total amount is required"}, status=status.HTTP_400_BAD_REQUEST)
 
-
         if not request.user:
             return Response({"error": "User must be authenticated"}, status=status.HTTP_401_UNAUTHORIZED)
-
 
         tickets = []  # Liste pour stocker les tickets créés
         updated_passes = []  # Liste pour suivre les mises à jour des stocks
         calculated_total = 0  # Calculer le montant total en fonction des passes
 
-
-
-        # Vérifier la disponibilité avant tout achat
+        # Valider les passes et calculer le montant total
         for pass_item in passes_data:
             event_id = pass_item.get("event_id")
             pass_category = pass_item.get("pass_category")
@@ -864,6 +861,7 @@ class BuyPassAPIView(generics.CreateAPIView):
                 if not pass_price:
                     return Response({"error": f"Invalid pass type {pass_category} for event {event_id}"}, status=status.HTTP_400_BAD_REQUEST)
 
+                # Vérifier la disponibilité avant tout achat
                 if pass_price.quantity < quantity:
                     return Response({"error": f"Insufficient passes available for category {pass_category} in event {event_id}"}, status=status.HTTP_400_BAD_REQUEST)
 
@@ -884,27 +882,7 @@ class BuyPassAPIView(generics.CreateAPIView):
         # Créer la commande (Order)
         order = Order.objects.create(user=user, total_amount=calculated_total, status='pending')
 
-
-
-        # Si tout est validé, créer les tickets et mettre à jour les stocks
-        # for event, event_pass, pass_price, quantity in updated_passes:
-        #     ticket = ETicket.objects.create(
-        #         event=event,
-        #         user=user,
-        #         pass_category=event_pass,
-        #         price=pass_price.price,
-        #         quantity=quantity,
-        #         is_payment_done=False,
-        #         order=order  # Lier chaque ticket à la commande
-        #     )
-        #     tickets.append(ticket)
-        #
-        #     # Mise à jour du stock
-        #     pass_price.quantity -= quantity
-        #     pass_price.save()
-
         # Si tout est validé, créer les OrderItems et les tickets, puis mettre à jour les stocks
-
         for event, event_pass, pass_price, quantity in updated_passes:
             # Créer l'OrderItem correspondant
             order_item = OrderItem.objects.create(
@@ -915,26 +893,27 @@ class BuyPassAPIView(generics.CreateAPIView):
                 price=pass_price.price
             )
 
-            # Maintenant, on peut créer le ETicket en le liant à OrderItem
-            ticket = ETicket.objects.create(
-                event=event,
-                user=user,
-                pass_category=event_pass,
-                price=pass_price.price,
-                quantity=quantity,
-                is_payment_done=False,
-                order=order,  # Lier à la commande
-                order_item=order_item  # Lier à l'OrderItem (OBLIGATOIRE)
-            )
-            tickets.append(ticket)
+            # Créer un ETicket pour chaque quantité
+            for _ in range(quantity):
+                ticket = ETicket.objects.create(
+                    event=event,
+                    user=user,
+                    pass_category=event_pass,
+                    price=pass_price.price,
+                    quantity=1,  # Chaque ticket représente une quantité de 1
+                    is_payment_done=False,
+                    order=order,  # Lier à la commande
+                    order_item=order_item  # Lier à l'OrderItem (OBLIGATOIRE)
+                )
+                tickets.append(ticket)
 
             # Mise à jour du stock
             pass_price.quantity -= quantity
             pass_price.save()
 
-
-    # Sérialiser la réponse
+        # Sérialiser la réponse
         ticket_serializer = ETicketSerializer(tickets, many=True)
+
         order_data = {
             "order_id": order.order_id,
             "total_amount": order.total_amount,
@@ -948,6 +927,115 @@ class BuyPassAPIView(generics.CreateAPIView):
                 "order": order_data  # Inclure les informations de la commande dans la réponse
             }
         }, status=status.HTTP_201_CREATED)
+
+# class BuyPassAPIView(generics.CreateAPIView):
+#     """
+#     API view to purchase multiple passes for multiple events in a single request.
+#     """
+#     serializer_class = ETicketSerializer
+#     permission_classes = [IsAuthenticated, IsEndUser]
+#
+#     def create(self, request, *args, **kwargs):
+#         # Récupérer les données de la requête
+#         data = request.data
+#         total_amount = data.get("total_amount")  # Montant total
+#         passes_data = data.get("passes")  # Liste des passes
+#         # user_id = data.get("user_id")  # Liste des passes
+#         user = request.user
+#
+#         if not isinstance(passes_data, list):
+#             return Response({"error": "Invalid data format, expected a list for passes"}, status=status.HTTP_400_BAD_REQUEST)
+#
+#         if total_amount is None:
+#             return Response({"error": "Total amount is required"}, status=status.HTTP_400_BAD_REQUEST)
+#
+#
+#         if not request.user:
+#             return Response({"error": "User must be authenticated"}, status=status.HTTP_401_UNAUTHORIZED)
+#
+#         tickets = []  # Liste pour stocker les tickets créés
+#         updated_passes = []  # Liste pour suivre les mises à jour des stocks
+#         calculated_total = 0  # Calculer le montant total en fonction des passes
+#
+#         for pass_item in passes_data:
+#             event_id = pass_item.get("event_id")
+#             pass_category = pass_item.get("pass_category")
+#             quantity = pass_item.get("quantity", 1)
+#
+#             try:
+#                 event = Event.objects.get(id=event_id)
+#                 event_pass = PassCategory.objects.get(id=pass_category)
+#                 pass_price = EventPassCategory.objects.filter(event=event, pass_category=event_pass).first()
+#
+#                 if not pass_price:
+#                     return Response({"error": f"Invalid pass type {pass_category} for event {event_id}"}, status=status.HTTP_400_BAD_REQUEST)
+#
+#                 # Vérifier la disponibilité avant tout achat
+#                 if pass_price.quantity < quantity:
+#                     return Response({"error": f"Insufficient passes available for category {pass_category} in event {event_id}"}, status=status.HTTP_400_BAD_REQUEST)
+#
+#                 # Ajouter au montant total calculé
+#                 calculated_total += pass_price.price * quantity
+#
+#                 updated_passes.append((event, event_pass, pass_price, quantity))
+#
+#             except Event.DoesNotExist:
+#                 return Response({"error": f"Event {event_id} not found"}, status=status.HTTP_404_NOT_FOUND)
+#             except PassCategory.DoesNotExist:
+#                 return Response({"error": f"Pass category {pass_category} not found"}, status=status.HTTP_404_NOT_FOUND)
+#
+#         # Vérifier si le montant total calculé correspond à celui envoyé
+#         if total_amount != calculated_total:
+#             return Response({"error": "The total amount does not match the sum of the passes"}, status=status.HTTP_400_BAD_REQUEST)
+#
+#         # Créer la commande (Order)
+#         order = Order.objects.create(user=user, total_amount=calculated_total, status='pending')
+#
+#         # Si tout est validé, créer les OrderItems et les tickets, puis mettre à jour les stocks
+#         for event, event_pass, pass_price, quantity in updated_passes:
+#             # Créer l'OrderItem correspondant
+#             order_item = OrderItem.objects.create(
+#                 order=order,
+#                 event=event,
+#                 pass_category=event_pass,
+#                 quantity=quantity,
+#                 price=pass_price.price
+#             )
+#
+#             # Maintenant, on peut créer le ETicket en le liant à OrderItem
+#             ticket = ETicket.objects.create(
+#                 event=event,
+#                 user=user,
+#                 pass_category=event_pass,
+#                 price=pass_price.price,
+#                 quantity=quantity,
+#                 is_payment_done=False,
+#                 order=order,  # Lier à la commande
+#                 order_item=order_item  # Lier à l'OrderItem (OBLIGATOIRE)
+#             )
+#             tickets.append(ticket)
+#
+#             # Mise à jour du stock
+#             pass_price.quantity -= quantity
+#             pass_price.save()
+#
+#
+#         # Sérialiser la réponse
+#         ticket_serializer = ETicketSerializer(tickets, many=True)
+#
+#         order_data = {
+#             "order_id": order.order_id,
+#             "total_amount": order.total_amount,
+#             "status": order.status,
+#             "payment_done": order.payment_done
+#         }
+#
+#         return Response({
+#             "response": {
+#                 "data": ticket_serializer.data,
+#                 "order": order_data  # Inclure les informations de la commande dans la réponse
+#             }
+#         }, status=status.HTTP_201_CREATED)
 
 
 
@@ -991,7 +1079,7 @@ class GetUserPurchaseTicket(APIView):
         user = request.user
 
         # Retrieve all ticket types for the user
-        etickets = ETicket.objects.filter(user=user)
+        etickets = ETicket.objects.filter(user=user, is_payment_done=True)
         physical_tickets = PhysicalTicket.objects.filter(user=user)
         thermal_tickets = ThermalTicket.objects.filter(user=user)
 
