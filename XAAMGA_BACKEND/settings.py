@@ -28,7 +28,6 @@ SECRET_KEY = 'django-insecure-hlre6g+_!2nyh*^07&-euy)a861q@#tl0-3=8=to^z9i4i!h5x
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
 
-ALLOWED_HOSTS = ['*', 'localhost', 'localhost:4200', 'https://xaamga-pass.com', 'https://v2.xaamga-ticket.com']
 
 
 # Application definition
@@ -191,6 +190,7 @@ EMAIL_HOST_USER ='no-reply@xaamga-ticket.com'
 EMAIL_HOST_PASSWORD = 'BH1.@ky2vQLm'
 DEFAULT_FROM_EMAIL = 'no-reply@xaamga-ticket.com'
 
+ALLOWED_HOSTS = ['*', 'localhost', 'localhost:4200', 'https://xaamga-pass.com', 'https://v2.xaamga-ticket.com','https://xaamga-ticket.com','https://www.xaamga-ticket.com']
 
 
 CORS_ALLOWED_ORIGINS = [
@@ -198,6 +198,8 @@ CORS_ALLOWED_ORIGINS = [
     'https://xaamga-pass.com',
     'https://v2.xaamga-ticket.com',
     'http://v2.xaamga-ticket.com',
+    'https://xaamga-ticket.com',
+    'https://www.xaamga-ticket.com',
     # Add other allowed origins here if needed
 ]
 CSRF_TRUSTED_ORIGINS = [
@@ -205,7 +207,10 @@ CSRF_TRUSTED_ORIGINS = [
     'https://xaamga-pass.com',
     'https://v2.xaamga-ticket.com',
     'http://v2.xaamga-ticket.com',
+    'https://xaamga-ticket.com',
+    'https://www.xaamga-ticket.com',
 ]
+
 
 CORS_ALLOW_HEADERS = [
     'accept',
@@ -227,5 +232,5 @@ SOCIAL_SECRET="8494a4c8287596a7a57d2d0ac451bb8f"
 
 BASE_URL="http://localhost:8000"
 
-FRONTEND_URL="http://localhost:4200"
+FRONTEND_URL='https://xaamga-ticket.com'
 # FRONTEND_URL="https://v2.xaamga-ticket.com"
