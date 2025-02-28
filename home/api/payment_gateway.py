@@ -22,6 +22,7 @@ import time
 import stripe
 
 STRIPE_WEBHOOK_SECRET = "whsec_aee52ec1cbc7143659007e3aee8028044256761930315b877c8b5ae869f8f920"
+# STRIPE_WEBHOOK_SECRET = "whsec_aee52ec1cbc7143659007e3aee8028044256761930315b877c8b5ae869f8f920"
 
 
 
@@ -59,9 +60,13 @@ class StripeGroupPaymentAPIView(APIView):
         customer_location = user_detail.address
 
         url = reverse('payment-response', kwargs={'user_id': user_id})
-        success_url = request.build_absolute_uri(url)
+        success_url = "http://localhost:4200/success"
+        # success_url = "http://localhost:4200/success"
+        # success_url = request.build_absolute_uri(url)
         print(success_url)
-        cancel_url = request.build_absolute_uri(reverse('payment-cancel'))
+        cancel_url = "http://localhost:4200/cancel"
+        # cancel_url = "http://localhost:4200/cancel"
+        # cancel_url = request.build_absolute_uri(reverse('payment-cancel'))
 
         missing_fields = []
 

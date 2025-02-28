@@ -233,4 +233,4 @@ SOCIAL_SECRET="8494a4c8287596a7a57d2d0ac451bb8f"
 BASE_URL="http://localhost:8000"
 
 FRONTEND_URL='https://xaamga-ticket.com'
-# FRONTEND_URL="https://v2.xaamga-ticket.com"
+# FRONTEND_URL="https://v2.xaamga-ticket.com/"
