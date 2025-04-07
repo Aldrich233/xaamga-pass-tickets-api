@@ -30,6 +30,13 @@ DEBUG = True
 
 
 
+
+SPECTACULAR_SETTINGS = {
+    'TITLE': 'Elyos Api',
+    'DESCRIPTION': 'Test description',
+    'VERSION': '1.0.0',
+}
+
 # Application definition
 
 INSTALLED_APPS = [
@@ -44,14 +51,18 @@ INSTALLED_APPS = [
     # 'allauth.account',
     # 'allauth.socialaccount',
     # 'allauth.socialaccount.providers.google',
+    "drf_spectacular",
     'rest_framework',
     'rest_framework.authtoken',
     "corsheaders",
     "django_countries",
-    
-    # Local Apps 
+
+
+    # Local Apps
     'home',
 ]
+
+
 
 MIDDLEWARE = [
     "corsheaders.middleware.CorsMiddleware",
@@ -71,7 +82,7 @@ ROOT_URLCONF = 'XAAMGA_BACKEND.urls'
 TEMPLATES = [
     {
         'BACKEND': 'django.template.backends.django.DjangoTemplates',
-        'DIRS': ['templates'],
+         'DIRS': [os.path.join(BASE_DIR, 'templates')],
         'APP_DIRS': True,
         'OPTIONS': {
             'context_processors': [
@@ -147,6 +158,7 @@ AUTHENTICATION_BACKENDS = (
 AUTH_USER_MODEL = 'home.CustomUser'
 
 REST_FRAMEWORK = {
+    'DEFAULT_SCHEMA_CLASS': 'drf_spectacular.openapi.AutoSchema',
     'DEFAULT_AUTHENTICATION_CLASSES': [
         'rest_framework.authentication.TokenAuthentication',  # <-- And here
     ],

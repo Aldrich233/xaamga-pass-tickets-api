@@ -67,7 +67,7 @@ class EventTalent(CustomUser):
 class Admin(models.Model):
     user = models.OneToOneField(CustomUser, on_delete=models.CASCADE)
     first_name = models.CharField(max_length=255)
-    second_name = models.CharField(max_length=255)
+    last_name = models.CharField(max_length=255)
     address = models.CharField(max_length=255)
     telephone_number = models.CharField(max_length=255)
     email = models.EmailField()
@@ -80,14 +80,20 @@ class Admin(models.Model):
 
 class Partner(models.Model):
     PARTNER_TYPE_CHOICES = (
-        ('patner_1', 'Partner 1'),
-        ('patner_2', 'Partner 2'),
-        ('patner_3', 'Partner 3')
+        ('partner_1', 'Partner 1'),
+        ('partner_2', 'Partner 2'),
+        ('partner_3', 'Partner 3')
     )
+
+    # PARTNER_TYPE_CHOICES = (
+    #     ('patner_1', 'Partner 1'),
+    #     ('patner_2', 'Partner 2'),
+    #     ('patner_3', 'Partner 3')
+    # )
     user = models.OneToOneField(CustomUser, on_delete=models.CASCADE, related_name='partner')
     company_name = models.CharField(max_length=255, default="Non spécifié")
     first_name = models.CharField(max_length=255, default="Non spécifié")
-    second_name = models.CharField(max_length=255, default="Non spécifié")
+    last_name = models.CharField(max_length=255, default="Non spécifié")
     address = models.CharField(max_length=255, default="Non spécifié")
     telephone_number = models.CharField(max_length=255, default="Non spécifié")
     email = models.EmailField(default="Non spécifié")
@@ -129,7 +135,7 @@ class Client(models.Model):
     partner = models.ForeignKey(Partner, on_delete=models.CASCADE, blank=True, null=True, related_name="client_partner")
     company_name = models.CharField(max_length=255)
     first_name = models.CharField(max_length=255)
-    second_name = models.CharField(max_length=255)
+    last_name = models.CharField(max_length=255)
     address = models.CharField(max_length=255)
     telephone_number = models.CharField(max_length=255)
     email = models.EmailField()
@@ -182,15 +188,13 @@ class Event(models.Model):
     event_name = models.CharField(max_length=255)
     event_country = CountryField(max_length=255, default='Senegal')
     event_place = models.CharField(max_length=255)
-    # New fields for geolocation
     latitude = models.FloatField(null=True, blank=True)
     longitude = models.FloatField(null=True, blank=True)
-
     description = models.TextField()
     # type_of_event = models.CharField(max_length=255)
     category = models.ForeignKey(Category, on_delete=models.CASCADE, null=True)
-    client = models.ForeignKey(Client, on_delete=models.CASCADE, null=True)
-    partner = models.ForeignKey(Partner, on_delete=models.CASCADE, null=True)
+    client = models.ForeignKey(Client, on_delete=models.CASCADE, null=True, related_name="handles_partner_events_clients")
+    partner = models.ForeignKey(Partner, on_delete=models.CASCADE, null=True, related_name="handles_partner_events")
     event_partner = models.ForeignKey(
         EventPartner, on_delete=models.CASCADE, blank=True, null=True, related_name="partner_events"
     )
@@ -208,6 +212,8 @@ class Event(models.Model):
     is_resourses_added = models.BooleanField(default=False)
     is_payment_done = models.BooleanField(default=False)
     is_activated = models.BooleanField(default=False)
+
+    # event_qrCode
 
     def __str__(self):
         return f"{self.event_name} - is activated {self.is_activated}"
@@ -244,7 +250,7 @@ class EventPassCategory(models.Model):
 class EndUserDetail(models.Model):
     user = models.OneToOneField(CustomUser, on_delete=models.CASCADE)
     first_name = models.CharField(max_length=255)
-    second_name = models.CharField(max_length=255)
+    last_name = models.CharField(max_length=255)
     address = models.CharField(max_length=255)
     telephone_number = models.CharField(max_length=255, null=True)
     email = models.EmailField(null=True)
@@ -363,7 +369,7 @@ class EventService(models.Model):
 #     team_type = models.CharField(max_length=255 , choices=TEAM_TYPE_CHOICES)
 #     member_type = models.CharField(max_length=255,choices=MEMBER_TYPE_CHOICES)
 #     first_name = models.CharField(max_length=255)
-#     second_name = models.CharField(max_length=255)
+#     last_name = models.CharField(max_length=255)
 #     member_post  = models.CharField(max_length=255)
 #     member_role  = models.CharField(max_length=255,default='C-in Point')
 #     telephone_number = models.CharField(max_length=255)

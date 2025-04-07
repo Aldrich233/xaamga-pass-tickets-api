@@ -1,4 +1,5 @@
 from django.urls import path
+from drf_spectacular.views import SpectacularSwaggerView, SpectacularAPIView, SpectacularRedocView
 
 from home.api.payment_gateway import *
 from . import payment_gateway
@@ -19,6 +20,7 @@ urlpatterns = [
     path('generate-random-user/', RandomUserAPIView.as_view(), name='generate_random_user'),
     path('get-all-users/', GetAllUserList.as_view(), name='user-list'),
     path('update-delete-users/', UpdateAndDeleteUsers.as_view(), name='update-delete-user'),
+
     path('partner/register/', PartnerRegister.as_view(), name='partner_register'),
     path('admin/register/', AdminRegister.as_view(), name='admin_register'),
     path('client/register/', ClientRegister.as_view(), name='client_register'),
@@ -111,7 +113,7 @@ urlpatterns = [
     path('send-gift/', SendGiftAPI.as_view(), name='send-gift'),
 
 
-    #TEAM APIs 
+    #TEAM APIs
     path('team/login/', TeamLoginAPIView.as_view(), name='team-login'),
     # path('drinks-team/login/', DrinksTeamLoginAPIView.as_view(), name='drinks-user-login'),
     # path('food-court-team/login/', FoodCourtTeamLoginAPIView.as_view(), name='food-court-login'),
@@ -154,7 +156,10 @@ urlpatterns = [
     path('facebook/', FacebookSocialAuthView.as_view()),
 
 
-    
+
+    path('schema/', SpectacularAPIView.as_view(), name='schema'),
+    path('swagger/', SpectacularSwaggerView.as_view(url_name='schema'), name='swagger-ui'),
+    path('redoc/', SpectacularRedocView.as_view(url_name='schema'), name='redoc'),
 
 ]
 

@@ -1,4 +1,6 @@
 from smtplib import SMTPException
+
+from drf_spectacular.openapi import AutoSchema
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status
@@ -1123,6 +1125,8 @@ class GetUserPurchaseTicket(APIView):
 # ADD TO CART
 
 class AddToCart(APIView):
+    schema = AutoSchema()
+
     """
     API view to add passes to the user's cart.
     """

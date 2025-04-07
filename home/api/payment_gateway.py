@@ -6,6 +6,7 @@ import uuid
 import requests
 from django.http import JsonResponse
 from django.views.decorators.csrf import csrf_exempt
+from drf_spectacular.openapi import AutoSchema
 from rest_framework.decorators import api_view
 from rest_framework.exceptions import ValidationError, PermissionDenied, NotAuthenticated
 from rest_framework.views import APIView
@@ -27,6 +28,7 @@ STRIPE_WEBHOOK_SECRET = "whsec_aee52ec1cbc7143659007e3aee8028044256761930315b877
 
 
 class StripeGroupPaymentAPIView(APIView):
+    schema = AutoSchema()
 
     def post(self, request):
         # Récupérer l'utilisateur et la commande
@@ -217,6 +219,8 @@ def stripe_webhook(request):
 
 
 class SuccessPageAPIView(APIView):
+    schema = AutoSchema()
+
     def get(self, request, user_id):
         if not user_id:
             return Response({"error": "User ID is required"}, status=status.HTTP_400_BAD_REQUEST)
@@ -281,11 +285,15 @@ class SuccessPageAPIView(APIView):
 
 
 class CancelPageAPIView(APIView):
+    schema = AutoSchema()
+
     def get(self, request):
         return render(request, 'cancel_page.html')
 
 
 class WavePaymentAPIView(APIView):
+    schema = AutoSchema()
+
     def post(self, request):
         logged_in_user = request.data.get('user_id')
         user = EndUserDetail.objects.get(user=logged_in_user)
@@ -359,6 +367,7 @@ class WavePaymentAPIView(APIView):
 
 
 class CinetpayGroupPaymentAPIView(APIView):
+    schema = AutoSchema()
 
     def post(self, request):
         logged_in_user = request.data.get('user_id')
@@ -516,6 +525,8 @@ class CinetpayGroupPaymentAPIView(APIView):
 
 
 class OrangePaymentAPIView(APIView):
+    schema = AutoSchema()
+
     def post(self, request):
         user_id = request.data.get('user_id')
         events_amount = request.data.get('events_amount')

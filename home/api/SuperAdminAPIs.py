@@ -1,5 +1,8 @@
 import base64
 import requests
+from django.db import IntegrityError
+from django.db.models import Q
+from drf_spectacular.openapi import AutoSchema
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status
@@ -24,6 +27,8 @@ import json
 
 
 class RandomUserAPIView(APIView):
+    schema = AutoSchema()
+
     """
     This class defines a RandomUserAPIView which is an API view to generate random usernames and passwords.
     It utilizes the generate_random_username and generate_random_password methods to create the username and password.
@@ -54,6 +59,8 @@ class RandomUserAPIView(APIView):
 
 
 class GetAllUserList(APIView):
+    schema = AutoSchema()
+
     """
     This class defines a GetAllUserList API view which retrieves information about all users.
     The get method is implemented to handle HTTP GET requests and returns data including the total number of users,
@@ -61,17 +68,31 @@ class GetAllUserList(APIView):
     """
 
     def get(self, request, format=None):
-        users = CustomUser.objects.all()
+        users = CustomUser.objects.filter(
+            is_active=True,
+        ).filter(
+            Q(is_admin=True) |
+            Q(is_partner=True) |
+            Q(is_client=True) |
+            Q(is_team=True)
+        )
         all_users = CustomUser.objects.all().count()
-        active_user_count = CustomUser.objects.filter(is_active=True).count()
-        inactive_user_count = CustomUser.objects.filter(is_active=False).count()
-        serializer = GetAllUserSerializer(users, many=True)
-        return Response(
-            {'all_users': all_users, 'active_user_count': active_user_count, 'inactive_user_count': inactive_user_count,
-             "data": serializer.data})
+
+        # active_user_count = CustomUser.objects.filter(is_active=True).count()
+        # inactive_user_count = CustomUser.objects.filter(is_active=False).count()
+
+        serializer = GetAllUserSerializer(users,  many=True)
+
+        return Response({'data': serializer.data})
+
+        # return Response(
+        #     {'all_users': all_users, 'active_user_count': active_user_count, 'inactive_user_count': inactive_user_count,
+        #      "data": serializer.data})
 
 
 class UpdateAndDeleteUsers(APIView):
+    schema = AutoSchema()
+
     """
     This class defines an UpdateAndDeleteUsers API view which allows updating and deleting users.
     The put method is implemented to handle HTTP PUT requests for updating a user's activation status.
@@ -102,6 +123,8 @@ class UpdateAndDeleteUsers(APIView):
 
 
 class PartnerRegister(APIView):
+    schema = AutoSchema()
+
     """
     This class defines a PartnerRegister API view which handles partner registration.
     The get method retrieves all partner objects.
@@ -116,111 +139,168 @@ class PartnerRegister(APIView):
         except Exception as e:
             return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
+    from django.db.utils import IntegrityError
+    from django.core.exceptions import ValidationError
+
     def post(self, request, *args, **kwargs):
-        # Validating and getting data from request
         required_fields = ['company_name', 'first_name', 'last_name', 'address', 'telephone_number', 'email',
-                           'partner_type']
+                           'partner_type', 'username', 'password']
+
         for field in required_fields:
             if field not in request.data:
                 return Response({"error": f"Missing required field: '{field}'"}, status=status.HTTP_400_BAD_REQUEST)
-        username = request.data['username']
+
+        username = request.data['username'].lower()
         password = request.data['password']
-        company_name = request.data['company_name']
-        first_name = request.data['first_name']
-        last_name = request.data['last_name']
-        address = request.data['address']
+        company_name = request.data['company_name'].lower()
+        first_name = request.data['first_name'].lower()
+        last_name = request.data['last_name'].lower()
+        address = request.data['address'].lower()
         telephone_number = request.data['telephone_number']
-        email = request.data['email']
+        email = request.data['email'].lower()
         partner_type = request.data['partner_type']
 
-        is_user = CustomUser.objects.filter(email=email).exists()
-
-        if is_user:
+        # Vérifier si un utilisateur avec cet email existe
+        if CustomUser.objects.filter(email=email).exists():
             return Response({"error": "User with this email already exists. Please use a different email."},
                             status=status.HTTP_400_BAD_REQUEST)
 
-        user = CustomUser.objects.create_user(username=username, password=password, email=email)
-        user.first_name = first_name
-        user.last_name = last_name
+        # Vérifier si un utilisateur avec ce username existe
+        if CustomUser.objects.filter(username=username).exists():
+            return Response({"error": "User with this username already exists. Please use a different username."},
+                            status=status.HTTP_400_BAD_REQUEST)
 
-        partner = Partner.objects.create(
-            user=user,
-            company_name=company_name,
-            first_name=first_name,
-            second_name=last_name,
-            address=address,
-            telephone_number=telephone_number,
-            email=email,
-            partner_type=partner_type,
-        )
+        try:
+            # Créer l'utilisateur
+            user = CustomUser.objects.create_user(username=username, password=password, email=email)
+            user.first_name = first_name
+            user.last_name = last_name
+            user.is_active = True
+            user.is_partner = True
+            user.save()
 
-        user.is_active = True
-        user.is_partner = True
-        user.save()
+            # Créer le partenaire
+            partner = Partner.objects.create(
+                user=user,
+                company_name=company_name,
+                first_name=first_name,
+                last_name=last_name,
+                address=address,
+                telephone_number=telephone_number,
+                email=email,
+                partner_type=partner_type,
+            )
 
-        partner_serializer = PartnerSerializer(partner)
+            # Sérialiser la réponse
+            partner_serializer = PartnerSerializer(partner)
 
-        response = {
-            "partner": partner_serializer.data,
-            "status": 1
-        }
-        return Response(response, status=status.HTTP_201_CREATED)
+            response = {
+                "partner": partner_serializer.data,
+                "status": 1
+            }
+            return Response(response, status=status.HTTP_201_CREATED)
+
+        except IntegrityError as e:
+            error_message = str(e)
+            if "unique constraint" in error_message.lower():
+                if "username" in error_message.lower():
+                    return Response({"error": "Username already exists. Please choose a different one."},
+                                    status=status.HTTP_400_BAD_REQUEST)
+                elif "email" in error_message.lower():
+                    return Response({"error": "Email already exists. Please use another email."},
+                                    status=status.HTTP_400_BAD_REQUEST)
+            return Response({"error": f"Database integrity error: {error_message}"}, status=status.HTTP_400_BAD_REQUEST)
+
+        except ValidationError as e:
+            return Response({"error": f"Validation error: {e}"}, status=status.HTTP_400_BAD_REQUEST)
 
 
 # PARTNER UPDATE RETRIEVE DELETE
 
 
 class PartnerCustomUserDetailAPIView(RetrieveUpdateDestroyAPIView):
-    """
-    This class defines a PartnerCustomUserDetailAPIView which provides detailed CRUD operations for a Partner and its associated CustomUser.
-    """
+    schema = AutoSchema()
     serializer_class = PartnerCustomUserSerializer
-
-    queryset = Partner.objects.all()  # Define the queryset for the Client model
+    queryset = Partner.objects.all()
 
     def get(self, request, pk):
         try:
             partner = Partner.objects.get(pk=pk)
-            # Access the associated CustomUser for the client
-            user = partner.user
-            serializer = PartnerCustomUserSerializer(partner)
+            serializer = self.get_serializer(partner)
             return Response(serializer.data)
         except Partner.DoesNotExist:
-            return Response({"error": "partner not found."}, status=status.HTTP_404_NOT_FOUND)
+            return Response({"error": "Partner not found."}, status=status.HTTP_404_NOT_FOUND)
 
     def patch(self, request, pk):
         try:
             partner = Partner.objects.get(pk=pk)
-            # Access the associated CustomUser for the client
             user = partner.user
 
-            # Update Client fields
-            partner_serializer = PartnerSerializer(partner, data=request.data, partial=True)
+            # Créer une copie mutable des données
+            data = request.data.copy()
+
+            # Séparer les données utilisateur
+            user_fields = ['username', 'password', 'email', 'first_name']
+            user_data = {k: data.pop(k) for k in user_fields if k in data}
+
+            # Mise à jour du CustomUser
+            if user_data:
+                user_serializer = CustomUserSerializer(
+                    user,
+                    data=user_data,
+                    partial=True,
+                    context={'request': request}  # Important pour la validation
+                )
+                if user_serializer.is_valid():
+                    user_serializer.save()
+                else:
+                    return Response(
+                        {'user_errors': user_serializer.errors},
+                        status=status.HTTP_400_BAD_REQUEST
+                    )
+
+            # Mise à jour du Partner
+            partner_serializer = PartnerSerializer(
+                partner,
+                data=data,
+                partial=True
+            )
             if partner_serializer.is_valid():
                 partner_serializer.save()
+            else:
+                return Response(
+                    {'partner_errors': partner_serializer.errors},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
 
-            # Update CustomUser fields
-            user_serializer = self.get_serializer(user, data=request.data, partial=True)
-            if user_serializer.is_valid():
-                user_serializer.save()
+            # Retourner les données complètes mises à jour
+            updated_partner = Partner.objects.get(pk=pk)
+            serializer = self.get_serializer(updated_partner)
+            return Response(serializer.data)
 
-            return Response(user_serializer.data)
         except Partner.DoesNotExist:
             return Response({"error": "Partner not found."}, status=status.HTTP_404_NOT_FOUND)
 
     def delete(self, request, pk):
         try:
             partner = Partner.objects.get(pk=pk)
-            # Access the associated CustomUser for the client
             user = partner.user
             partner.delete()
             user.delete()
-            return Response({"detail": "Partner and User deleted successfully."}, status=status.HTTP_200_OK)
+            return Response(
+                {"detail": "Partner and User deleted successfully."},
+                status=status.HTTP_200_OK
+            )
         except Partner.DoesNotExist:
-            return Response({"error": "Partner not found."}, status=status.HTTP_404_NOT_FOUND)
+            return Response(
+                {"error": "Partner not found."},
+                status=status.HTTP_404_NOT_FOUND
+            )
 
 
 class AdminRegister(APIView):
+    schema = AutoSchema()
+
     """
     This class defines an AdminRegister API view which handles admin registration.
     The get method retrieves all admin objects.
@@ -262,7 +342,7 @@ class AdminRegister(APIView):
         admin = Admin.objects.create(
             user=user,
             first_name=first_name,
-            second_name=last_name,
+            last_name=last_name,
             address=address,
             telephone_number=telephone_number,
             email=email,
@@ -283,6 +363,8 @@ class AdminRegister(APIView):
 
 # ADMIN UPDATE
 class AdminCustomUserDetailAPIView(RetrieveUpdateDestroyAPIView):
+    schema = AutoSchema()
+
     """
     This class defines an AdminCustomUserDetailAPIView which provides detailed CRUD operations for an Admin and its associated CustomUser.
     """
@@ -336,6 +418,8 @@ class AdminCustomUserDetailAPIView(RetrieveUpdateDestroyAPIView):
 # ADMIN LOGIN API
 
 class AdminLoginAPIView(APIView):
+    schema = AutoSchema()
+
     """
     This class defines an AdminLoginAPIView which handles the login functionality for admins.
     """
@@ -359,7 +443,7 @@ class AdminLoginAPIView(APIView):
                 admin_data = Admin.objects.get(user=user)
                 admin_info = {
                     'first_name': admin_data.first_name,
-                    'second_name': admin_data.second_name,
+                    'last_name': admin_data.last_name,
                     'address': admin_data.address,
                     'telephone_number': admin_data.telephone_number,
                     'email': admin_data.email,
@@ -379,6 +463,8 @@ class AdminLoginAPIView(APIView):
 
 
 class ClientRegister(APIView):
+    schema = AutoSchema()
+
     """
     This class defines a ClientRegister API view which retrieves information about all clients and their associated events.
     """
@@ -404,6 +490,7 @@ class ClientRegister(APIView):
 
     def post(self, request, *args, **kwargs):
         # Validating and getting data from request
+        #Le username represente l'identifiant
         required_fields = ['company_name', 'first_name', 'last_name', 'address', 'telephone_number', 'email']
         for field in required_fields:
             if field not in request.data:
@@ -434,7 +521,7 @@ class ClientRegister(APIView):
             partner=partner_obj,
             company_name=company_name,
             first_name=first_name,
-            second_name=last_name,
+            last_name=last_name,
             address=address,
             telephone_number=telephone_number,
             email=email,
@@ -455,6 +542,8 @@ class ClientRegister(APIView):
 
 # CLIENT UPDATE RETRIEVE DELETE
 class ClientCustomUserDetailAPIView(RetrieveUpdateDestroyAPIView):
+    schema = AutoSchema()
+
     """
     This class defines a ClientCustomUserDetailAPIView which provides detailed CRUD operations for a Client and its associated CustomUser.
     """
@@ -472,24 +561,52 @@ class ClientCustomUserDetailAPIView(RetrieveUpdateDestroyAPIView):
             return Response({"error": "Client not found."}, status=status.HTTP_404_NOT_FOUND)
 
     def patch(self, request, pk):
+        print("\n=== DEBUT DE LA REQUETE PATCH ===")
+        print(f"Données reçues (raw): {request.data}")
+
         try:
+            # Debug 1 - Vérification de l'existence du client
             client = Client.objects.get(pk=pk)
-            # Access the associated CustomUser for the client
-            user = client.user
+            print(f"\nDebug 1 - Client trouvé: ID={client.id}, Nom={client.company_name}")
+            print(f"User associé: ID={client.user.id}, Username={client.user.username}")
 
-            # Update Client fields
-            client_serializer = ClientSerializer(client, data=request.data, partial=True)
-            if client_serializer.is_valid():
-                client_serializer.save()
+            # Debug 2 - Initialisation du serializer
+            serializer = ClientSerializer(client, data=request.data, partial=True)
+            print("\nDebug 2 - Serializer initialisé")
+            print(f"Données fournies au serializer: {serializer.initial_data}")
 
-            # Update CustomUser fields
-            user_serializer = self.get_serializer(user, data=request.data, partial=True)
-            if user_serializer.is_valid():
-                user_serializer.save()
+            # Debug 3 - Validation
+            is_valid = serializer.is_valid(raise_exception=False)
+            print(f"\nDebug 3 - Validation du serializer: {is_valid}")
+            if not is_valid:
+                print(f"Erreurs de validation: {serializer.errors}")
+                return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
-            return Response(user_serializer.data)
+            # Debug 4 - Sauvegarde
+            print("\nDebug 4 - Avant sauvegarde")
+            print(f"Données validées: {serializer.validated_data}")
+
+            instance = serializer.save()
+            print("\nDebug 5 - Après sauvegarde")
+            print(f"Instance Client mise à jour: {instance.__dict__}")
+            print(f"User associé mis à jour: {instance.user.__dict__}")
+
+            # Debug 6 - Vérification en base
+            client_refreshed = Client.objects.get(pk=pk)
+            user_refreshed = client_refreshed.user
+            print("\nDebug 6 - Vérification en base de données")
+            print(f"Client en base: {client_refreshed.__dict__}")
+            print(f"User en base: {user_refreshed.__dict__}")
+
+            return Response(serializer.data)
+
         except Client.DoesNotExist:
+            print("\nDebug ERROR - Client non trouvé")
             return Response({"error": "Client not found."}, status=status.HTTP_404_NOT_FOUND)
+        except Exception as e:
+            print(f"\nDebug ERROR - Exception inattendue: {str(e)}")
+            raise
+
 
     def delete(self, request, pk):
         try:
@@ -504,6 +621,8 @@ class ClientCustomUserDetailAPIView(RetrieveUpdateDestroyAPIView):
 
 
 class CreateEvent(APIView):
+    schema = AutoSchema()
+
     """
     This class defines a CreateEvent API view which handles the creation of events.
     """
@@ -531,7 +650,7 @@ class CreateEvent(APIView):
             for event in serializer.data:
                 event_details = f"{event['event_name']} - {event['event_place']} - {event['begindatetime']}"
 
-                print("EVENTTTTTTT " + str(event['begindatetime']))
+                # print("EVENTTTTTTT " + str(event['begindatetime']))
                 qr_code_file = self.generate_qr_code(event_details)
                 event['qr_code'] = base64.b64encode(qr_code_file.read()).decode('utf-8')
 
@@ -697,6 +816,8 @@ class CreateEvent(APIView):
 
 
 class CreateEventRelatedModels(APIView):
+    schema = AutoSchema()
+
     """
     This class defines a CreateEventRelatedModels API view which handles the creation of related models for an event.
     """
@@ -818,6 +939,8 @@ class CreateEventRelatedModels(APIView):
 # EVENT DELETE UPDATE RETEIEVE
 
 class EventCustomUserDetailAPIView(RetrieveUpdateDestroyAPIView):
+    schema = AutoSchema()
+
     """
     This class defines an EventCustomUserDetailAPIView which handles the retrieval, update, and deletion of users associated with events.
     """
@@ -910,6 +1033,8 @@ class EventCustomUserDetailAPIView(RetrieveUpdateDestroyAPIView):
 # LIST APIS
 
 class PartnerListView(APIView):
+    schema = AutoSchema()
+
     """
     This class defines a PartnerListView API view which handles the retrieval of partner information.
     """
@@ -927,14 +1052,16 @@ class PartnerListView(APIView):
 
         partners = Partner.objects.all()
 
-        if not partners:  # Check if there are no partners
-            return Response({"message": "No partners found."}, status=status.HTTP_404_NOT_FOUND)
+        # if not partners:  # Check if there are no partners
+        #     return Response({"message": "No partners found."}, status=status.HTTP_404_NOT_FOUND)
 
         serializer = PartnerCompanyNameSerializer(partners, many=True)
         return Response(serializer.data, status=status.HTTP_200_OK)
 
 
 class PartnerDetailsView(APIView):
+    schema = AutoSchema()
+
     """
     This class defines a PartnerDetailsView API view which handles the retrieval of partner details.
     """
@@ -966,6 +1093,8 @@ class PartnerDetailsView(APIView):
 
 
 class ClientListView(APIView):
+    schema = AutoSchema()
+
     """
     This class defines a ClientListView API view which handles the retrieval of client information.
     """
@@ -990,6 +1119,8 @@ class ClientListView(APIView):
 
 
 class ClientDetailsView(APIView):
+    schema = AutoSchema()
+
     """
     This class defines a ClientDetailsView API view which handles the retrieval and deletion of client details.
     """
@@ -1043,6 +1174,8 @@ class ClientDetailsView(APIView):
 # TEAM APIS
 
 class EventTeamCreateView(APIView):
+    schema = AutoSchema()
+
     """
     This class defines an EventTeamCreateView API view which handles the creation and retrieval of event teams.
     """
@@ -1087,7 +1220,7 @@ class EventTeamCreateView(APIView):
             "event": request.data.get("event"),
             "member_type": request.data.get("member_type"),
             "first_name": request.data.get("first_name"),
-            "second_name": request.data.get("second_name"),
+            "last_name": request.data.get("last_name"),
             "member_post": request.data.get("member_post"),
             "member_role": request.data.get("member_role", "C-in Point"),
             "telephone_number": request.data.get("telephone_number"),
@@ -1103,7 +1236,7 @@ class EventTeamCreateView(APIView):
         # Create the user
         user = CustomUser.objects.create_user(username=username, email=event_team_data["email"], password=password)
         user.first_name = event_team_data["first_name"],
-        user.last_name = event_team_data["second_name"],
+        user.last_name = event_team_data["last_name"],
         user.is_team = True
         user.save()
         event_team_data["user"] = user.id
@@ -1118,6 +1251,7 @@ class EventTeamCreateView(APIView):
 
 
 class EventPriceDetails(APIView):
+    schema = AutoSchema()
     """
     This class defines an EventPriceDetails API view to retrieve price details for an event.
     """
@@ -1217,6 +1351,8 @@ class EventPriceDetails(APIView):
 
 # EVENT QR CODE GENERATION
 class EventQRCodeAPIView(APIView):
+    schema = AutoSchema()
+
     """
     This class defines an API view to generate QR code for event credentials.
     """
@@ -1319,6 +1455,8 @@ class EventQRCodeAPIView(APIView):
 # ADD SERVICES PRICE
 
 class ServicePriceListCreateView(ListCreateAPIView):
+    schema = AutoSchema()
+
     """
     This class defines an API view to list and create service prices.
     """
@@ -1337,6 +1475,8 @@ class ServicePriceListCreateView(ListCreateAPIView):
 
 
 class ServicePriceRetrieveUpdateDestroyView(RetrieveUpdateDestroyAPIView):
+    schema = AutoSchema()
+
     """
     This class defines an API view to retrieve, update, or delete a service price.
     """
@@ -1345,6 +1485,8 @@ class ServicePriceRetrieveUpdateDestroyView(RetrieveUpdateDestroyAPIView):
 
 
 class EventList(APIView):
+    schema = AutoSchema()
+
     """
     This class defines an API view to retrieve a list of events.
     """
@@ -1446,6 +1588,8 @@ class EventList(APIView):
 #         return Response({"message": "Event Team deleted successfully"}, status=status.HTTP_204_NO_CONTENT)
 
 class ServicePriceAPIView(APIView):
+    schema = AutoSchema()
+
     """
     This class defines an API view to retrieve service prices for a specific event.
     """
@@ -1463,6 +1607,8 @@ class ServicePriceAPIView(APIView):
 
 
 class LogoutView(APIView):
+    schema = AutoSchema()
+
     """
     This class defines an API view to handle user logout.
     """
@@ -1478,6 +1624,8 @@ class LogoutView(APIView):
 
 
 class CreateEvents1(APIView):
+    schema = AutoSchema()
+
     """
     This class defines an API view to create events.
     """
@@ -1638,6 +1786,8 @@ class CreateEvents1(APIView):
 
 
 class CreateEvents3(APIView):
+    schema = AutoSchema()
+
     """
     This class defines an API view to generate a QR code for an event and create a user associated with the event.
     """
@@ -1701,6 +1851,8 @@ class CreateEvents3(APIView):
 
 
 class CreateEvents4(APIView):
+    schema = AutoSchema()
+
     """
     This class defines an API view to update event images.
     """
@@ -1724,6 +1876,8 @@ class CreateEvents4(APIView):
 
 
 class ActiveDeactiveEvent(APIView):
+    schema = AutoSchema()
+
     """
     This class defines an API view to activate or deactivate an event.
     """
@@ -1745,6 +1899,8 @@ class ActiveDeactiveEvent(APIView):
 
 
 class ConvertCurrencyView(views.APIView):
+    schema = AutoSchema()
+
     """
     This class defines an API view to convert currencies.
     """
@@ -1777,6 +1933,8 @@ class ConvertCurrencyView(views.APIView):
 
 
 class TranslateView(APIView):
+    schema = AutoSchema()
+
     """
     This class defines an API view to translate text.
     """

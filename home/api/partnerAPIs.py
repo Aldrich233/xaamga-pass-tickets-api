@@ -1,3 +1,4 @@
+from drf_spectacular.openapi import AutoSchema
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework.authtoken.models import Token
@@ -9,6 +10,8 @@ from rest_framework import status
 from .custom_permissions import *
 
 class PartnerLoginAPIView(APIView):
+    schema = AutoSchema()
+
     def post(self, request):
         serializer = PartnerLoginSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
@@ -35,6 +38,8 @@ class PartnerLoginAPIView(APIView):
 #EVENT CREATED BY PARTNER 
 
 class CreateEventByPartner(APIView):
+    schema = AutoSchema()
+
     authentication_classes = [TokenAuthentication]
     permission_classes = [IsAuthenticated , IsPartner]
     def get(self, request):
@@ -202,6 +207,8 @@ class CreateEventByPartner(APIView):
     
 
 class ClientRegisterByPartner(APIView):
+    # schema = AutoSchema()
+
     authentication_classes = [TokenAuthentication]
     permission_classes = [IsAuthenticated , IsPartner]
     def get(self, request):
@@ -268,6 +275,8 @@ class ClientRegisterByPartner(APIView):
     
     
 class PartnerDescriptionUpdate(APIView):
+    schema = AutoSchema()
+
     permission_classes = [IsAuthenticated]
 
     def patch(self, request):

@@ -54,38 +54,83 @@ class PartnerSerializer(serializers.ModelSerializer):
         return value
 
 
+# class PartnerCustomUserSerializer(serializers.ModelSerializer):
+#     partner = PartnerSerializer()
+#
+#     class Meta:
+#         model = CustomUser
+#         fields = ['id', 'username', 'password', 'email', 'first_name', 'partner']
+
 class PartnerCustomUserSerializer(serializers.ModelSerializer):
-    partner = PartnerSerializer()
-
-    class Meta:
-        model = CustomUser
-        fields = ['id', 'username', 'password', 'email', 'first_name', 'partner']
-
-class PartnerCompanyNameSerializer(serializers.ModelSerializer):
-    # Add fields for client and event counts
-    client_count = serializers.SerializerMethodField()
-    event_count = serializers.SerializerMethodField()
-    username = serializers.SerializerMethodField()
-    password = serializers.SerializerMethodField()
+    username = serializers.CharField(source='user.username')
+    email = serializers.EmailField(source='user.email')
+    first_name = serializers.CharField(source='user.first_name')
+    password = serializers.CharField(
+        source='user.password',
+        write_only=True,
+        required=False,
+        style={'input_type': 'password'}
+    )
 
     class Meta:
         model = Partner
-        fields = ['id', 'company_name', 'company_description','telephone_number','email','first_name',"username","password",'created_at', 'client_count', 'event_count',]
+        fields = ['id', 'username', 'password', 'email', 'first_name',
+                  'company_name', 'last_name', 'address', 'telephone_number',
+                  'partner_type', 'company_description', 'created_at', 'updated_at']
 
-    def get_client_count(self, obj):
-        # Count the related Client objects
-        return obj.client_partner.count()
+    def update(self, instance, validated_data):
+        user_data = validated_data.pop('user', {})
+        user = instance.user
+
+        # Mise à jour du mot de passe séparément si besoin
+        password = user_data.pop('password', None)
+        if password:
+            user.set_password(password)
+
+        # Mise à jour des autres champs utilisateur
+        for attr, value in user_data.items():
+            setattr(user, attr, value)
+        user.save()
+
+        # Mise à jour du Partner
+        for attr, value in validated_data.items():
+            setattr(instance, attr, value)
+        instance.save()
+
+        return instance
+
+
+class PartnerCompanyNameSerializer(serializers.ModelSerializer):
+
+    user = CustomUserSerializer()
+
+    # Add fields for client and event counts
+    event_count = serializers.SerializerMethodField()
+    clients_count = serializers.SerializerMethodField() #(nombre de clients uniques liés à ces événements) .distinct().count() → Compte le nombre de clients uniques.
+    # username = serializers.SerializerMethodField()
+    # password = serializers.SerializerMethodField()
+
+    class Meta:
+        model = Partner
+        fields = '__all__'
 
     def get_event_count(self, obj):
         # Count the related Event objects
-        return obj.partner_event.count()
-    def get_username(self, obj):
-        # Access the username from the related CustomUser model
-        return obj.user.username
+        return obj.handles_partner_events.count()
 
-    def get_password(self, obj):
-        # Access the password from the related CustomUser model
-        return obj.user.password
+    def get_clients_count(self, obj):
+        # Count the related Client objects
+        return obj.handles_partner_events.values('client').distinct().count()
+
+
+
+    # def get_username(self, obj):
+        # Access the username from the related CustomUser model
+        # return obj.user.username
+
+    # def get_password(self, obj):
+    #     # Access the password from the related CustomUser model
+    #     return obj.user.password
 
 class PartnerDescriptionUpdateSerializer(serializers.ModelSerializer):
     class Meta:
@@ -93,21 +138,93 @@ class PartnerDescriptionUpdateSerializer(serializers.ModelSerializer):
         fields = ['company_description']
 
 
-
 class ClientSerializer(serializers.ModelSerializer):
-    username = serializers.SerializerMethodField(read_only = True)
-    password = serializers.SerializerMethodField(read_only = True)
+    username = serializers.CharField(source='user.username', required=False)
+    email = serializers.EmailField(source='user.email', required=False)
+
     class Meta:
         model = Client
-        fields = '__all__'
+        fields = ['id', 'company_name', 'username', 'email',
+                  'first_name', 'last_name', 'address', 'telephone_number', 'partner']
 
-    def get_username(self, obj):
-        # Access the username from the related CustomUser model
-        return obj.user.username
+    def update(self, instance, validated_data):
+        user_data = validated_data.pop('user', {})
 
-    def get_password(self, obj):
-        # Access the password from the related CustomUser model
-        return obj.user.password
+        # Synchronisation bidirectionnelle
+        if 'first_name' in validated_data:
+            user_data['first_name'] = validated_data['first_name']
+        elif 'first_name' not in validated_data and 'first_name' in user_data:
+            validated_data['first_name'] = user_data['first_name']
+
+        if 'last_name' in validated_data:
+            user_data['last_name'] = validated_data['last_name']
+        elif 'last_name' not in validated_data and 'last_name' in user_data:
+            validated_data['last_name'] = user_data['last_name']
+
+        # Mise à jour User
+        if user_data:
+            user = instance.user
+            for attr, value in user_data.items():
+                setattr(user, attr, value)
+            user.save()
+
+        # Mise à jour Client
+        instance = super().update(instance, validated_data)
+
+        return instance
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+# class ClientSerializer(serializers.ModelSerializer):
+#     # username = serializers.SerializerMethodField(read_only = True)
+#     # password = serializers.SerializerMethodField(read_only = True)
+#     username = serializers.CharField(source='user.username', required=False)
+#     password = serializers.CharField(source='user.password', required=False, write_only=True)
+#     email = serializers.EmailField(source='user.email', required=False)
+#     first_name = serializers.CharField(source='user.first_name', required=False)
+#     last_name = serializers.CharField(source='user.last_name', required=False)
+#
+#     class Meta:
+#         model = Client
+#         fields = '__all__'
+#
+#     def get_username(self, obj):
+#         # Access the username from the related CustomUser model
+#         return obj.user.username
+#
+#     def get_password(self, obj):
+#         # Access the password from the related CustomUser model
+#         return obj.user.password
+#
+#     def update(self, instance, validated_data):
+#         user_data = validated_data.pop('user', None)
+#         if user_data:
+#             user = instance.user
+#             # Gestion spéciale pour le password (hachage)
+#             if 'password' in user_data:
+#                 user.set_password(user_data['password'])
+#                 user_data.pop('password')
+#
+#             # Mise à jour des autres champs user
+#             for attr, value in user_data.items():
+#                 setattr(user, attr, value)
+#             user.save()
+#
+#         # Mise à jour des champs Client
+#         return super().update(instance, validated_data)
+
 
 class ClientCustomUserSerializer(serializers.ModelSerializer):
     client = ClientSerializer()
@@ -117,9 +234,18 @@ class ClientCustomUserSerializer(serializers.ModelSerializer):
         fields = ['id', 'username', 'password', 'email', 'first_name', 'client']
 
 class ClientCompanyNameSerializer(serializers.ModelSerializer):
+    # user = CustomUserSerializer()
+    password = serializers.CharField(source='user.password',  read_only=True)
+    username = serializers.CharField(source='user.username',  read_only=True)
+    partner = PartnerSerializer()
+    event_count = serializers.SerializerMethodField()
     class Meta:
         model = Client
-        fields = ['id','company_name',"company_description"]
+        # fields = ['id','company_name',"company_description"]
+        fields = '__all__'
+
+    def get_event_count(self, obj):
+        return Event.objects.filter(user=obj.user).count()
 
 class PartnerLoginSerializer(serializers.Serializer):
     username = serializers.CharField()
@@ -170,9 +296,9 @@ class EventSerializer(serializers.ModelSerializer):
     event_image_2 = serializers.CharField(read_only=True)
     event_image_3 = serializers.CharField(read_only=True)
     client_first_name = serializers.CharField(source='client.first_name', read_only=True)
-    client_second_name = serializers.CharField(source='client.second_name', read_only=True)
+    client_last_name = serializers.CharField(source='client.last_name', read_only=True)
     partner_first_name = serializers.CharField(source='partner.first_name', read_only=True)
-    partner_second_name = serializers.CharField(source='partner.second_name', read_only=True)
+    partner_last_name = serializers.CharField(source='partner.last_name', read_only=True)
     category_name = serializers.CharField(source='category.name', read_only=True)
 
     class Meta:
@@ -191,9 +317,9 @@ class EventSerializer(serializers.ModelSerializer):
             'event_image_2', 
             'event_image_3',
             'client_first_name', 
-            'client_second_name', 
+            'client_last_name', 
             'partner_first_name', 
-            'partner_second_name', 
+            'partner_last_name', 
             'category_name', 
             'event_pass_categories'
         ]
@@ -211,7 +337,8 @@ class EventCustomUserSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Event
-        fields = ['id', 'username', 'password', 'email', 'first_name', 'event']
+        # fields = ['id', 'username', 'password', 'email', 'first_name', 'event']
+        fields = '__all__'
 
 # class EventPassSerializer(serializers.ModelSerializer):
 #     class Meta:
